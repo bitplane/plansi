@@ -77,7 +77,7 @@ class TerminalRenderer:
         self.current_style = None  # Track current terminal style state
 
     def _render_full_frame(self, image: Image.Image) -> str:
-        """Render entire frame to ANSI using chafa without temporary files."""
+        """Render frame to ANSI."""
         # Convert PIL image to RGB if not already
         if image.mode != "RGB":
             image = image.convert("RGB")
@@ -98,9 +98,6 @@ class TerminalRenderer:
 
         # Get ANSI output
         ansi_output = self.canvas.print().decode("utf-8")
-
-        # Fix line endings - chafa outputs \n but we need \r\n for proper terminal positioning
-        ansi_output = ansi_output.replace("\n", "\r\n")
 
         return ansi_output
 
