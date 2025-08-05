@@ -39,8 +39,10 @@ class TerminalRenderer:
 
         # Create bittty terminal instance
         self.terminal = Terminal(width=width, height=height)
-        # Disable cursor
+        # Configure terminal behavior
         self.terminal.cursor_visible = False
+        self.terminal.parser.feed("\x1b[?7l")  # Disable line wrapping
+        self.terminal.parser.feed("\x1b[?20h")  # Enable LNM (makes \n behave like \r\n)
 
         # Configure chafa for full frame rendering
         self.config = CanvasConfig()
@@ -51,6 +53,11 @@ class TerminalRenderer:
         self.config.work_factor = 1.0
         self.config.width = width
         self.config.height = height
+
+        # Create reusable canvas
+        self.canvas = Canvas(self.config)
+        self.canvas.width = self.width
+        self.canvas.height = self.height
 
     def _render_full_frame(self, image: Image.Image) -> str:
         """Render entire frame to ANSI using chafa without temporary files."""
@@ -63,14 +70,9 @@ class TerminalRenderer:
         pixel_data = image.tobytes()
         rowstride = width * 3  # RGB = 3 bytes per pixel
 
-        # Create chafa canvas for full frame
-        canvas = Canvas(self.config)
-        canvas.width = self.width
-        canvas.height = self.height
-
-        # Draw using raw pixel data (no temporary file!)
-        canvas.draw_all_pixels(
-            PixelType.CHAFA_PIXEL_RGB8,  # RGB, 8 bits per channel
+        # Draw using raw pixel data
+        self.canvas.draw_all_pixels(
+            PixelType.CHAFA_PIXEL_RGB8,
             pixel_data,
             width,
             height,
@@ -78,12 +80,31 @@ class TerminalRenderer:
         )
 
         # Get ANSI output
-        ansi_output = canvas.print().decode("utf-8")
+        ansi_output = self.canvas.print().decode("utf-8")
 
         # Fix line endings - chafa outputs \n but we need \r\n for proper terminal positioning
         ansi_output = ansi_output.replace("\n", "\r\n")
 
         return ansi_output
+
+    def _render_to_buffer(self, image: Image.Image) -> str:
+        """Render frame for buffer parsing (no line ending fixes needed)."""
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+
+        width, height = image.size
+        pixel_data = image.tobytes()
+        rowstride = width * 3
+
+        self.canvas.draw_all_pixels(
+            PixelType.CHAFA_PIXEL_RGB8,
+            pixel_data,
+            width,
+            height,
+            rowstride,
+        )
+
+        return self.canvas.print().decode("utf-8")
 
     def _contrast(self, fg_color: tuple, bg_color: tuple) -> float:
         """Calculate contrast between foreground and background colors.
@@ -188,34 +209,21 @@ class TerminalRenderer:
         return (0, 0, 0)  # Default to black if can't extract
 
     def _visual_difference(self, cell1: tuple, cell2: tuple) -> float:
-        """Calculate visual difference between two cells based on human perception.
-
-        Algorithm:
-        1. Check if cells are identical (early exit)
-        2. Handle inverse video by flipping fg/bg for comparison
-        3. Calculate contrast between fg and bg for each cell
-        4. If glyph differs, weight by contrast (more contrast = more visible difference)
-        5. Multiply by perceptual color difference between the cells
-
-        Args:
-            cell1: (Style, char) from first cell
-            cell2: (Style, char) from second cell
-
-        Returns:
-            Visual difference score (0.0 = identical, higher = more different)
-        """
+        """Calculate visual difference between two cells based on human perception."""
         style1, char1 = cell1
         style2, char2 = cell2
 
-        # Extract colors
+        # Early exit for identical characters and styles
+        if char1 == char2 and style1.reverse == style2.reverse:
+            # Quick style comparison before expensive color extraction
+            if style1.fg == style2.fg and style1.bg == style2.bg:
+                return 0.0
+
+        # Extract colors once
         fg1 = self._extract_rgb_color(style1.fg)
         bg1 = self._extract_rgb_color(style1.bg)
         fg2 = self._extract_rgb_color(style2.fg)
         bg2 = self._extract_rgb_color(style2.bg)
-
-        # Quick check for identical cells (compare actual color values and chars)
-        if char1 == char2 and fg1 == fg2 and bg1 == bg2 and style1.reverse == style2.reverse:
-            return 0.0
 
         # Handle inverse video by flipping fg/bg for comparison
         if style1.reverse:
@@ -224,12 +232,10 @@ class TerminalRenderer:
             fg2, bg2 = bg2, fg2
 
         # Calculate perceptual color difference between the two cells
-        # Use the average of fg and bg differences
         fg_color_diff = min(self._color_distance(fg1, fg2) / 200.0, 1.0)
         bg_color_diff = min(self._color_distance(bg1, bg2) / 200.0, 1.0)
         total_diff = (fg_color_diff + bg_color_diff) / 2.0
 
-        # Scale by 100 to make threshold more intuitive (default 30 = 30% difference)
         return total_diff * 100.0
 
     def _cells_different(self, main_cell: tuple, alt_cell: tuple) -> bool:
@@ -295,10 +301,12 @@ class TerminalRenderer:
             self._initialized = True
 
         # Render new frame with chafa
-        full_ansi = self._render_full_frame(image)
+        full_ansi = self._render_to_buffer(image)
 
         # Switch to alt buffer and render new frame
         self.terminal.alternate_screen_on()
+        self.terminal.clear_screen()  # Clear alt buffer before rendering new frame
+        self.terminal.set_cursor(0, 0)  # Reset cursor to home position
         self.terminal.parser.feed(full_ansi)
 
         # Compare main buffer (current state) vs alt buffer (new frame)
