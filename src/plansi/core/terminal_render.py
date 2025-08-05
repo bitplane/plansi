@@ -2,8 +2,6 @@
 
 from PIL import Image
 from typing import Set, Tuple
-import tempfile
-import os
 import math
 from chafa import (
     Canvas,
@@ -12,8 +10,8 @@ from chafa import (
     ColorSpace,
     DitherMode,
     PixelMode,
+    PixelType,
 )
-from chafa.loader import Loader
 from bittty import Terminal
 
 
@@ -55,36 +53,37 @@ class TerminalRenderer:
         self.config.height = height
 
     def _render_full_frame(self, image: Image.Image) -> str:
-        """Render entire frame to ANSI using chafa."""
-        # Save to temporary file for chafa
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-            image.save(tmp.name, "PNG")
-            tmp_path = tmp.name
+        """Render entire frame to ANSI using chafa without temporary files."""
+        # Convert PIL image to RGB if not already
+        if image.mode != "RGB":
+            image = image.convert("RGB")
 
-        try:
-            # Load image with chafa loader
-            loader = Loader(tmp_path)
+        # Get raw pixel data
+        width, height = image.size
+        pixel_data = image.tobytes()
+        rowstride = width * 3  # RGB = 3 bytes per pixel
 
-            # Create chafa canvas for full frame
-            canvas = Canvas(self.config)
-            canvas.width = self.width
-            canvas.height = self.height
+        # Create chafa canvas for full frame
+        canvas = Canvas(self.config)
+        canvas.width = self.width
+        canvas.height = self.height
 
-            # Draw using loader
-            canvas.draw_all_pixels(
-                loader.pixel_type, loader.get_pixels(), loader.width, loader.height, loader.rowstride
-            )
+        # Draw using raw pixel data (no temporary file!)
+        canvas.draw_all_pixels(
+            PixelType.CHAFA_PIXEL_RGB8,  # RGB, 8 bits per channel
+            pixel_data,
+            width,
+            height,
+            rowstride,
+        )
 
-            # Get ANSI output
-            ansi_output = canvas.print().decode("utf-8")
+        # Get ANSI output
+        ansi_output = canvas.print().decode("utf-8")
 
-            # Fix line endings - chafa outputs \n but we need \r\n for proper terminal positioning
-            ansi_output = ansi_output.replace("\n", "\r\n")
+        # Fix line endings - chafa outputs \n but we need \r\n for proper terminal positioning
+        ansi_output = ansi_output.replace("\n", "\r\n")
 
-            return ansi_output
-
-        finally:
-            os.unlink(tmp_path)
+        return ansi_output
 
     def _contrast(self, fg_color: tuple, bg_color: tuple) -> float:
         """Calculate contrast between foreground and background colors.
@@ -179,10 +178,10 @@ class TerminalRenderer:
         Returns:
             RGB tuple (r, g, b) - defaults to black if no color
         """
-        if not color_obj or not hasattr(color_obj, "value") or not color_obj.value:
+        if not color_obj or not color_obj.value:
             return (0, 0, 0)  # Default to black
 
-        if hasattr(color_obj.value, "__iter__") and len(color_obj.value) == 3:
+        if len(color_obj.value) == 3:
             # Extract and quantize the color
             return self._quantize_rgb(tuple(color_obj.value))
 
@@ -252,16 +251,14 @@ class TerminalRenderer:
         parts.append("\x1b[0m")
 
         # Foreground color
-        if style.fg and hasattr(style.fg, "value") and style.fg.value:
-            if hasattr(style.fg.value, "__iter__") and len(style.fg.value) == 3:
-                r, g, b = style.fg.value
-                parts.append(f"\x1b[38;2;{r};{g};{b}m")
+        if style.fg and style.fg.value and len(style.fg.value) == 3:
+            r, g, b = style.fg.value
+            parts.append(f"\x1b[38;2;{r};{g};{b}m")
 
         # Background color
-        if style.bg and hasattr(style.bg, "value") and style.bg.value:
-            if hasattr(style.bg.value, "__iter__") and len(style.bg.value) == 3:
-                r, g, b = style.bg.value
-                parts.append(f"\x1b[48;2;{r};{g};{b}m")
+        if style.bg and style.bg.value and len(style.bg.value) == 3:
+            r, g, b = style.bg.value
+            parts.append(f"\x1b[48;2;{r};{g};{b}m")
 
         # Attributes
         if style.bold:
