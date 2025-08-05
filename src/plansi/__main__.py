@@ -1,14 +1,23 @@
 """Command-line interface for plansi."""
 
 import argparse
+import atexit
 import os
 import sys
 from .player import Player
 from . import __version__
 
 
+def restore_cursor():
+    """Restore cursor visibility on exit."""
+    print("\x1b[?25h", end="", flush=True)
+
+
 def main():
     """Main CLI entry point."""
+    # Register cursor restoration for any exit scenario
+    atexit.register(restore_cursor)
+
     parser = argparse.ArgumentParser(description="Play videos as differential ANSI in terminal")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("video", help="Path to video file")
@@ -74,10 +83,12 @@ def main():
             play_to_console(console_player, args.video)
 
     except KeyboardInterrupt:
-        # Clean exit on Ctrl+C
-        print("\x1b[0m", flush=True)  # Reset terminal colors
+        # Clean exit on Ctrl+C - restore cursor and reset terminal
+        print("\x1b[0m\x1b[?25h", flush=True)  # Reset terminal colors and show cursor
         sys.exit(0)
     except Exception as e:
+        # Restore cursor on any error
+        print("\x1b[0m\x1b[?25h", flush=True)  # Reset terminal colors and show cursor
         print(f"\nError: {e}", file=sys.stderr)
         sys.exit(1)
 

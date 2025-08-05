@@ -71,9 +71,9 @@ class Player:
                 cache_style=self.cache_style,
             )
 
-            # Clear screen at start
-            clear_screen = "\x1b[2J\x1b[H"
-            yield (0.0, clear_screen)
+            # Clear screen and hide cursor at start
+            setup_terminal = "\x1b[2J\x1b[H\x1b[?25l"  # Clear screen, home cursor, hide cursor
+            yield (0.0, setup_terminal)
 
             for timestamp, frame in extractor.frames():
                 # Frame skipping and timing logic for real-time playback
@@ -117,8 +117,8 @@ class Player:
                 frame_count += 1
                 last_timestamp = timestamp
 
-            # After final frame, reset terminal and move cursor below video area for clean shell prompt
-            terminal_cleanup = f"\x1b[0m\x1b[{extractor.height + 1};1H"
+            # After final frame, reset terminal, show cursor, and move below video area for clean shell prompt
+            terminal_cleanup = f"\x1b[0m\x1b[?25h\x1b[{extractor.height + 1};1H"  # Reset, show cursor, position below
             yield (last_timestamp, terminal_cleanup)
 
     def frames(self, video_path: str) -> Iterator[Tuple[float, str]]:

@@ -6,6 +6,13 @@ dist
 coverage.json
 site
 *.mp4
+*.webm
+*.mkv
 *.cast
+*.gz
+*.xz
 *.txt
+*.log
+*.perf
+*.gzip
 docs/pydoc
