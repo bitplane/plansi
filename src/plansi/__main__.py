@@ -99,9 +99,11 @@ def write_cast_file(player: Player, video_path: str, output_path: str, width: in
                 cast_file.write(json.dumps(header) + "\n")
                 first_frame = False
 
-            # Write cast entry: [timestamp, "o", data]
-            cast_entry = [timestamp, "o", ansi_output]
-            cast_file.write(json.dumps(cast_entry) + "\n")
+            # Skip empty output lines
+            if ansi_output.strip():
+                # Write cast entry: [timestamp, "o", data] with formatted timestamp
+                cast_entry = [float(f"{timestamp:.4f}"), "o", ansi_output]
+                cast_file.write(json.dumps(cast_entry) + "\n")
 
         print(f"Wrote cast file: {output_path}", file=sys.stderr)
 
