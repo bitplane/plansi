@@ -4,11 +4,13 @@ import argparse
 import os
 import sys
 from .player import Player
+from . import __version__
 
 
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(description="Play videos as differential ANSI in terminal")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("video", help="Path to video file")
     parser.add_argument("output", nargs="?", help="Optional output .cast file (if not provided, plays to console)")
     # Auto-detect terminal width
