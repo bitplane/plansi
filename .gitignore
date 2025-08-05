@@ -8,3 +8,4 @@ site
 *.mp4
 *.cast
 *.txt
+docs/pydoc
