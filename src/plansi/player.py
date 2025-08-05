@@ -31,7 +31,7 @@ class Player:
         self.debug = debug
 
     def play(self, video_path: str) -> Iterator[Tuple[float, str]]:
-        """Generate (timestamp, ansi_str) tuples for video playback.
+        """Generate (timestamp, ansi_str) tuples for video playbook.
 
         Args:
             video_path: Path to video file
@@ -42,6 +42,9 @@ class Player:
         frame_count = 0
 
         with VideoExtractor(video_path, self.width, self.fps) as extractor:
+            # Store height for external access
+            self.height = extractor.height
+
             renderer = TerminalRenderer(
                 self.width, extractor.height, color_threshold=self.color_threshold, debug=self.debug
             )

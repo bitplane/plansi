@@ -248,6 +248,9 @@ class TerminalRenderer:
         """Convert bittty Style object to ANSI escape sequence."""
         parts = []
 
+        # Always start with reset to clear previous attributes
+        parts.append("\x1b[0m")
+
         # Foreground color
         if style.fg and hasattr(style.fg, "value") and style.fg.value:
             if hasattr(style.fg.value, "__iter__") and len(style.fg.value) == 3:
