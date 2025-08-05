@@ -1,16 +1,21 @@
 [project]
-name = "example_package"
-description = "example package"
-version = "0.1.0"
+name = "plansi"
+description = "plays videos as ansi"
+version = "0.0.1"
 authors = [
-    { name = "Random Hacker", email = "no@dev.null" }
+    { name = "Gareth Davidson", email = "gaz@bitplane.net" }
 ]
 readme = "README.md"
 requires-python = ">=3.10"
 
 dependencies = [
-
+    "chafa.py",
+    "av",
+    "Pillow"
 ]
+
+[project.scripts]
+plansi = "plansi.__main__:main"
 
 [project.optional-dependencies]
 dev = [
@@ -23,7 +28,7 @@ dev = [
     "ruff",
     "mkdocs",
     "mkdocs-material",
-    "pydocs-markdown"
+    "pydoc-markdown"
 ]
 
 [build-system]
