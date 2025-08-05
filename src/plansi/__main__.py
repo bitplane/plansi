@@ -13,32 +13,24 @@ def main():
     parser.add_argument("--width", "-w", type=int, default=80, help="Terminal width in characters (default: 80)")
     parser.add_argument("--fps", "-f", type=float, default=None, help="Target FPS (default: original video rate)")
     parser.add_argument(
-        "--pixel-threshold", "-p", type=int, default=30, help="RGB distance threshold for pixel changes (default: 30)"
-    )
-    parser.add_argument(
-        "--cell-threshold",
+        "--color-threshold",
         "-c",
         type=float,
-        default=0.25,
-        help="Fraction of pixels that must change in cell (default: 0.25)",
+        default=30.0,
+        help="RGB color distance threshold for cell changes (default: 30.0)",
     )
-    parser.add_argument(
-        "--keyframe-interval",
-        "-k",
-        type=int,
-        default=30,
-        help="Full refresh every N frames to prevent drift (default: 30)",
-    )
+    parser.add_argument("--no-diff", action="store_true", help="Disable differential rendering, output full frames")
+    parser.add_argument("--debug", action="store_true", help="Show debug information about cell comparisons")
 
     args = parser.parse_args()
 
     try:
         player = Player(
             width=args.width,
-            pixel_threshold=args.pixel_threshold,
-            cell_threshold=args.cell_threshold,
+            color_threshold=args.color_threshold,
             fps=args.fps,
-            keyframe_interval=args.keyframe_interval,
+            no_diff=args.no_diff,
+            debug=args.debug,
         )
 
         last_timestamp = 0.0
@@ -51,7 +43,8 @@ def main():
                     time.sleep(sleep_time)
 
             # Output ANSI to terminal
-            print(ansi_output, end="", flush=True)
+            sys.stdout.write(ansi_output)
+            sys.stdout.flush()
             last_timestamp = timestamp
 
     except KeyboardInterrupt:

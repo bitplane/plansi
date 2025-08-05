@@ -26,15 +26,12 @@ class VideoExtractor:
         self._container = av.open(self.video_path)
         self._stream = self._container.streams.video[0]
 
-        # Calculate height maintaining aspect ratio
-        # Each character cell is 8x4 pixels in chafa
+        # Calculate character height maintaining aspect ratio
+        # Let chafa handle pixel scaling - we just need character dimensions
         original_width = self._stream.width
         original_height = self._stream.height
-        pixel_width = self.width * 8
-        pixel_height = int((pixel_width * original_height) / original_width)
-        # Round to nearest multiple of 4 for character alignment
-        self.height = (pixel_height + 2) // 4
-        self.pixel_height = self.height * 4
+        aspect_ratio = original_height / original_width
+        self.height = int(self.width * aspect_ratio * 0.5)  # Terminal chars are ~2:1 aspect ratio
 
         return self
 
@@ -57,9 +54,8 @@ class VideoExtractor:
             if frame_interval and (timestamp - last_time) < frame_interval:
                 continue
 
-            # Scale frame to target size
+            # Get original image - chafa will handle all scaling
             img = frame.to_image()
-            img = img.resize((self.width * 8, self.pixel_height), Image.LANCZOS)
 
             yield timestamp, img
             last_time = timestamp
