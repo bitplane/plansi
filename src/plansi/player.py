@@ -20,6 +20,8 @@ class Player:
         no_diff: bool = False,
         debug: bool = False,
         realtime: bool = True,
+        cache_position: bool = False,
+        cache_style: bool = True,
     ):
         """Initialize video player.
 
@@ -30,6 +32,8 @@ class Player:
             no_diff: Disable differential rendering
             debug: Enable debug output
             realtime: Skip frames to maintain real-time playback (True for console, False for cast files)
+            cache_position: Enable cursor position caching optimization (experimental)
+            cache_style: Enable style caching optimization (default: True)
         """
         self.width = width
         self.color_threshold = color_threshold
@@ -37,6 +41,8 @@ class Player:
         self.no_diff = no_diff
         self.debug = debug
         self.realtime = realtime
+        self.cache_position = cache_position
+        self.cache_style = cache_style
 
     def play(self, video_path: str) -> Iterator[Tuple[float, str]]:
         """Generate (timestamp, ansi_str) tuples for video playbook.
@@ -57,7 +63,12 @@ class Player:
             self.height = extractor.height
 
             renderer = TerminalRenderer(
-                self.width, extractor.height, color_threshold=self.color_threshold, debug=self.debug
+                self.width,
+                extractor.height,
+                color_threshold=self.color_threshold,
+                debug=self.debug,
+                cache_position=self.cache_position,
+                cache_style=self.cache_style,
             )
 
             # Clear screen at start

@@ -34,6 +34,12 @@ def main():
     )
     parser.add_argument("--no-diff", action="store_true", help="Disable differential rendering, output full frames")
     parser.add_argument("--debug", action="store_true", help="Show debug information about cell comparisons")
+    parser.add_argument(
+        "--cache-position", action="store_true", help="Enable cursor position caching optimization (experimental)"
+    )
+    parser.add_argument(
+        "--no-cache-style", action="store_false", dest="cache_style", help="Disable style caching optimization"
+    )
 
     args = parser.parse_args()
 
@@ -47,6 +53,8 @@ def main():
                 no_diff=args.no_diff,
                 debug=args.debug,
                 realtime=False,  # Process every frame for complete recording
+                cache_position=args.cache_position,
+                cache_style=args.cache_style,
             )
             write_cast_file(cast_player, args.video, args.output)
         else:
@@ -58,6 +66,8 @@ def main():
                 no_diff=args.no_diff,
                 debug=args.debug,
                 realtime=True,  # Skip frames to maintain timing
+                cache_position=args.cache_position,
+                cache_style=args.cache_style,
             )
             play_to_console(console_player, args.video)
 

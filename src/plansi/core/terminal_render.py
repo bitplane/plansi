@@ -23,7 +23,15 @@ class TerminalRenderer:
     - Diff the buffers and output only changed cells
     """
 
-    def __init__(self, width: int, height: int, color_threshold: float = 5.0, debug: bool = False):
+    def __init__(
+        self,
+        width: int,
+        height: int,
+        color_threshold: float = 5.0,
+        debug: bool = False,
+        cache_position: bool = False,
+        cache_style: bool = True,
+    ):
         """Initialize terminal renderer.
 
         Args:
@@ -31,11 +39,15 @@ class TerminalRenderer:
             height: Height in character cells
             color_threshold: RGB distance threshold for color changes (0.0-441.67)
             debug: Enable debug output
+            cache_position: Enable cursor position caching optimization
+            cache_style: Enable style caching optimization
         """
         self.width = width
         self.height = height
         self.color_threshold = color_threshold
         self.debug = debug
+        self.cache_position = cache_position
+        self.cache_style = cache_style
 
         # Create bittty terminal instance
         self.terminal = Terminal(width=width, height=height)
@@ -58,6 +70,11 @@ class TerminalRenderer:
         self.canvas = Canvas(self.config)
         self.canvas.width = self.width
         self.canvas.height = self.height
+
+        # State tracking for optimized output generation
+        self.current_cursor_x = 0
+        self.current_cursor_y = 0
+        self.current_style = None  # Track current terminal style state
 
     def _render_full_frame(self, image: Image.Image) -> str:
         """Render entire frame to ANSI using chafa without temporary files."""
@@ -249,12 +266,128 @@ class TerminalRenderer:
 
         return visual_diff > self.color_threshold
 
-    def _style_to_ansi(self, style, char: str) -> str:
-        """Convert bittty Style object to ANSI escape sequence."""
-        parts = []
+    def _generate_cursor_movement(self, target_col: int, target_row: int) -> str:
+        """Generate minimal cursor movement to target position.
 
-        # Always start with reset to clear previous attributes
-        parts.append("\x1b[0m")
+        Args:
+            target_col: Target column (0-based)
+            target_row: Target row (0-based)
+
+        Returns:
+            ANSI escape sequence for cursor movement, or empty string if no movement needed
+        """
+        if not self.cache_position:
+            # Cursor caching disabled - always generate explicit positioning
+            return f"\x1b[{target_row + 1};{target_col + 1}H"
+
+        # Cursor caching enabled - optimize movements
+        # Already at target position
+        if self.current_cursor_x == target_col and self.current_cursor_y == target_row:
+            return ""
+
+        # Natural progression (next column on same row) - no movement needed
+        if target_col == self.current_cursor_x + 1 and target_row == self.current_cursor_y:
+            return ""
+
+        # Need explicit cursor positioning
+        return f"\x1b[{target_row + 1};{target_col + 1}H"
+
+    def _generate_style_changes(self, new_style) -> str:
+        """Generate minimal ANSI escape sequences for style changes.
+
+        Simple 3-case approach:
+        1. If identical -> no output
+        2. If attributes differ -> reset + full style
+        3. If only colors differ -> color sequences only
+        """
+        if not self.cache_style:
+            # Style caching disabled - always generate full style
+            return self._full_style_to_ansi(new_style)
+
+        # Style caching enabled - optimize style changes
+        result = ""
+
+        if self.current_style is None:
+            # First style - need full setup
+            result = self._full_style_to_ansi(new_style)
+        else:
+            # Check if styles are identical
+            if self._styles_identical(self.current_style, new_style):
+                # Case 1: Identical - no output needed
+                result = ""
+            else:
+                # Check if any text attributes differ
+                attributes_differ = (
+                    self.current_style.bold != new_style.bold
+                    or self.current_style.dim != new_style.dim
+                    or self.current_style.italic != new_style.italic
+                    or self.current_style.underline != new_style.underline
+                    or self.current_style.blink != new_style.blink
+                    or self.current_style.strike != new_style.strike
+                    or self.current_style.reverse != new_style.reverse
+                )
+
+                if attributes_differ:
+                    # Case 2: Attributes differ - reset and full rebuild
+                    result = self._full_style_to_ansi(new_style)
+                else:
+                    # Case 3: Only colors differ - send color sequences only
+                    parts = []
+
+                    # Check foreground color
+                    if not self._colors_equal(self.current_style.fg, new_style.fg):
+                        if new_style.fg and new_style.fg.value and len(new_style.fg.value) == 3:
+                            r, g, b = new_style.fg.value
+                            parts.append(f"\x1b[38;2;{r};{g};{b}m")
+                        else:
+                            # No foreground color - reset to default
+                            parts.append("\x1b[39m")
+
+                    # Check background color
+                    if not self._colors_equal(self.current_style.bg, new_style.bg):
+                        if new_style.bg and new_style.bg.value and len(new_style.bg.value) == 3:
+                            r, g, b = new_style.bg.value
+                            parts.append(f"\x1b[48;2;{r};{g};{b}m")
+                        else:
+                            # No background color - reset to default
+                            parts.append("\x1b[49m")
+
+                    result = "".join(parts)
+
+        # Always update current style to maintain consistency
+        self.current_style = new_style
+        return result
+
+    def _styles_identical(self, style1, style2) -> bool:
+        """Check if two styles are completely identical."""
+        # Check all attributes
+        if (
+            style1.bold != style2.bold
+            or style1.dim != style2.dim
+            or style1.italic != style2.italic
+            or style1.underline != style2.underline
+            or style1.blink != style2.blink
+            or style1.strike != style2.strike
+            or style1.reverse != style2.reverse
+        ):
+            return False
+
+        # Check colors
+        return self._colors_equal(style1.fg, style2.fg) and self._colors_equal(style1.bg, style2.bg)
+
+    def _colors_equal(self, color1, color2) -> bool:
+        """Check if two bittty color objects are equal."""
+        if not color1 and not color2:
+            return True
+        if not color1 or not color2:
+            return False
+        if not color1.value or not color2.value:
+            return not color1.value and not color2.value
+        return color1.value == color2.value
+
+    def _full_style_to_ansi(self, style) -> str:
+        """Generate full ANSI style sequence (used for first style)."""
+        parts = ["\x1b[0m"]  # Reset first
 
         # Foreground color
         if style.fg and style.fg.value and len(style.fg.value) == 3:
@@ -282,7 +415,6 @@ class TerminalRenderer:
         if style.strike:
             parts.append("\x1b[9m")
 
-        parts.append(char)
         return "".join(parts)
 
     def render_differential(self, image: Image.Image, changed_cells: Set[Tuple[int, int]]) -> Tuple[str, int]:
@@ -332,21 +464,36 @@ class TerminalRenderer:
             self.terminal.alternate_screen_off()
             return "", 0
 
+        # Reset state tracking for this frame
+        self.current_cursor_x = 0
+        self.current_cursor_y = 0
+        self.current_style = None
+
         output_parts = []
 
         # Sort by row first, then column for optimal cursor movement
         for col, row in sorted(changed_positions, key=lambda pos: (pos[1], pos[0])):
             alt_cell = self.terminal.alt_buffer.get_cell(col, row)
+            alt_style, alt_char = alt_cell
 
-            # Position cursor
-            output_parts.append(f"\x1b[{row + 1};{col + 1}H")
+            # Generate optimized cursor movement
+            cursor_movement = self._generate_cursor_movement(col, row)
+            if cursor_movement:
+                output_parts.append(cursor_movement)
 
-            # Convert style to ANSI and add character
-            cell_ansi = self._style_to_ansi(alt_cell[0], alt_cell[1])
-            output_parts.append(cell_ansi)
+            # Generate optimized style changes
+            style_changes = self._generate_style_changes(alt_style)
+            if style_changes:
+                output_parts.append(style_changes)
+
+            # Add the character
+            output_parts.append(alt_char)
+
+            # Update cursor position (character advances cursor by 1)
+            self.current_cursor_x = col + 1
+            self.current_cursor_y = row
 
             # Update main buffer to match what we're sending
-            alt_style, alt_char = alt_cell
             self.terminal.primary_buffer.set_cell(col, row, alt_char, alt_style)
 
         # Switch back to main buffer
