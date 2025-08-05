@@ -50,6 +50,7 @@ class Player:
         frame_count = 0
         skipped_frames = 0
         start_time = time.time() if self.realtime else None
+        last_timestamp = 0.0
 
         with VideoExtractor(video_path, self.width, self.fps) as extractor:
             # Store height for external access
@@ -103,6 +104,11 @@ class Player:
                         yield (timestamp, ansi_output)
 
                 frame_count += 1
+                last_timestamp = timestamp
+
+            # After final frame, reset terminal and move cursor below video area for clean shell prompt
+            terminal_cleanup = f"\x1b[0m\x1b[{extractor.height + 1};1H"
+            yield (last_timestamp, terminal_cleanup)
 
     def frames(self, video_path: str) -> Iterator[Tuple[float, str]]:
         """Generate raw frame data without timing delays.
