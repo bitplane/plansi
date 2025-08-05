@@ -5,8 +5,8 @@ import json
 import time
 import os
 import sys
-from .core.video import VideoExtractor
-from .core.terminal_render import TerminalRenderer
+from .video import VideoExtractor
+from .terminal_render import TerminalRenderer
 from .control_codes import SETUP_TERMINAL, RESTORE_TERMINAL, MOVE_CURSOR, RESET_STYLE
 
 

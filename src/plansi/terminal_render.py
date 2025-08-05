@@ -13,7 +13,7 @@ from chafa import (
     PixelType,
 )
 from bittty import Terminal
-from ..control_codes import (
+from .control_codes import (
     DISABLE_LINE_WRAP,
     ENABLE_LNM,
     MOVE_CURSOR,
