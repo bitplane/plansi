@@ -12,11 +12,12 @@ dependencies = [
     "bittty==0.0.6",
     "chafa.py~=1.2",
     "av~=15.0",
-    "Pillow~=11.3"
+    "Pillow~=11.3",
+    "yt-dlp>=2025.7"
 ]
 
 [project.scripts]
-plansi = "plansi.__main__:main"
+plansi = "plansi.cli:main"
 
 [project.optional-dependencies]
 dev = [

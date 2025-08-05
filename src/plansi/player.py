@@ -7,6 +7,7 @@ import os
 import sys
 from .core.video import VideoExtractor
 from .core.terminal_render import TerminalRenderer
+from .control_codes import SETUP_TERMINAL, RESTORE_TERMINAL, MOVE_CURSOR, RESET_STYLE
 
 
 class Player:
@@ -72,8 +73,7 @@ class Player:
             )
 
             # Clear screen and hide cursor at start
-            setup_terminal = "\x1b[2J\x1b[H\x1b[?25l"  # Clear screen, home cursor, hide cursor
-            yield (0.0, setup_terminal)
+            yield (0.0, SETUP_TERMINAL)
 
             for timestamp, frame in extractor.frames():
                 # Frame skipping and timing logic for real-time playback
@@ -99,17 +99,17 @@ class Player:
                     # No differential rendering - output full frame
                     full_ansi = renderer._render_full_frame(frame)
                     if self.debug:
-                        status = f"\x1b[0m\x1b[{extractor.height + 1};1HFrame: {frame_count}, Mode: full{' ' * 20}"
-                        yield (timestamp, f"\x1b[H{full_ansi}{status}")
+                        status = f"{RESET_STYLE}{MOVE_CURSOR.format(extractor.height + 1, 1)}Frame: {frame_count}, Mode: full{' ' * 20}"
+                        yield (timestamp, f"{MOVE_CURSOR.format(1, 1)}{full_ansi}{status}")
                     else:
-                        yield (timestamp, f"\x1b[H{full_ansi}")
+                        yield (timestamp, f"{MOVE_CURSOR.format(1, 1)}{full_ansi}")
                 else:
                     # Differential rendering
                     ansi_output, num_changed = renderer.render_differential(frame, set())
 
                     # Add status line only in debug mode
                     if self.debug:
-                        status = f"\x1b[0m\x1b[{extractor.height + 1};1HFrame: {frame_count}, Changed: {num_changed}{' ' * 20}"
+                        status = f"{RESET_STYLE}{MOVE_CURSOR.format(extractor.height + 1, 1)}Frame: {frame_count}, Changed: {num_changed}{' ' * 20}"
                         yield (timestamp, f"{ansi_output}{status}")
                     else:
                         yield (timestamp, ansi_output)
@@ -118,7 +118,7 @@ class Player:
                 last_timestamp = timestamp
 
             # After final frame, reset terminal, show cursor, and move below video area for clean shell prompt
-            terminal_cleanup = f"\x1b[0m\x1b[?25h\x1b[{extractor.height + 1};1H"  # Reset, show cursor, position below
+            terminal_cleanup = f"{RESTORE_TERMINAL}{MOVE_CURSOR.format(extractor.height + 1, 1)}"
             yield (last_timestamp, terminal_cleanup)
 
     def frames(self, video_path: str) -> Iterator[Tuple[float, str]]:

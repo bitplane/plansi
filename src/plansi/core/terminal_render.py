@@ -13,6 +13,23 @@ from chafa import (
     PixelType,
 )
 from bittty import Terminal
+from ..control_codes import (
+    DISABLE_LINE_WRAP,
+    ENABLE_LNM,
+    MOVE_CURSOR,
+    SET_FOREGROUND_RGB,
+    SET_BACKGROUND_RGB,
+    RESET_FOREGROUND,
+    RESET_BACKGROUND,
+    RESET_STYLE,
+    BOLD,
+    DIM,
+    ITALIC,
+    UNDERLINE,
+    BLINK,
+    REVERSE,
+    STRIKETHROUGH,
+)
 
 
 class TerminalRenderer:
@@ -53,8 +70,8 @@ class TerminalRenderer:
         self.terminal = Terminal(width=width, height=height)
         # Configure terminal behavior
         self.terminal.cursor_visible = False
-        self.terminal.parser.feed("\x1b[?7l")  # Disable line wrapping
-        self.terminal.parser.feed("\x1b[?20h")  # Enable LNM (makes \n behave like \r\n)
+        self.terminal.parser.feed(DISABLE_LINE_WRAP)
+        self.terminal.parser.feed(ENABLE_LNM)
 
         # Configure chafa for full frame rendering
         self.config = CanvasConfig()
@@ -275,7 +292,7 @@ class TerminalRenderer:
         """
         if not self.cache_position:
             # Cursor caching disabled - always generate explicit positioning
-            return f"\x1b[{target_row + 1};{target_col + 1}H"
+            return MOVE_CURSOR.format(target_row + 1, target_col + 1)
 
         # Cursor caching enabled - optimize movements
         # Already at target position
@@ -335,19 +352,19 @@ class TerminalRenderer:
                     if not self._colors_equal(self.current_style.fg, new_style.fg):
                         if new_style.fg and new_style.fg.value and len(new_style.fg.value) == 3:
                             r, g, b = new_style.fg.value
-                            parts.append(f"\x1b[38;2;{r};{g};{b}m")
+                            parts.append(SET_FOREGROUND_RGB.format(r, g, b))
                         else:
                             # No foreground color - reset to default
-                            parts.append("\x1b[39m")
+                            parts.append(RESET_FOREGROUND)
 
                     # Check background color
                     if not self._colors_equal(self.current_style.bg, new_style.bg):
                         if new_style.bg and new_style.bg.value and len(new_style.bg.value) == 3:
                             r, g, b = new_style.bg.value
-                            parts.append(f"\x1b[48;2;{r};{g};{b}m")
+                            parts.append(SET_BACKGROUND_RGB.format(r, g, b))
                         else:
                             # No background color - reset to default
-                            parts.append("\x1b[49m")
+                            parts.append(RESET_BACKGROUND)
 
                     result = "".join(parts)
 
@@ -384,33 +401,33 @@ class TerminalRenderer:
 
     def _full_style_to_ansi(self, style) -> str:
         """Generate full ANSI style sequence (used for first style)."""
-        parts = ["\x1b[0m"]  # Reset first
+        parts = [RESET_STYLE]
 
         # Foreground color
         if style.fg and style.fg.value and len(style.fg.value) == 3:
             r, g, b = style.fg.value
-            parts.append(f"\x1b[38;2;{r};{g};{b}m")
+            parts.append(SET_FOREGROUND_RGB.format(r, g, b))
 
         # Background color
         if style.bg and style.bg.value and len(style.bg.value) == 3:
             r, g, b = style.bg.value
-            parts.append(f"\x1b[48;2;{r};{g};{b}m")
+            parts.append(SET_BACKGROUND_RGB.format(r, g, b))
 
         # Attributes
         if style.bold:
-            parts.append("\x1b[1m")
+            parts.append(BOLD)
         if style.reverse:
-            parts.append("\x1b[7m")
+            parts.append(REVERSE)
         if style.dim:
-            parts.append("\x1b[2m")
+            parts.append(DIM)
         if style.italic:
-            parts.append("\x1b[3m")
+            parts.append(ITALIC)
         if style.underline:
-            parts.append("\x1b[4m")
+            parts.append(UNDERLINE)
         if style.blink:
-            parts.append("\x1b[5m")
+            parts.append(BLINK)
         if style.strike:
-            parts.append("\x1b[9m")
+            parts.append(STRIKETHROUGH)
 
         return "".join(parts)
 
