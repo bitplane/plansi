@@ -1,6 +1,9 @@
 """Main Player class that orchestrates video playback with differential rendering."""
 
 from typing import Iterator, Tuple
+import json
+import time
+import os
 from .core.video import VideoExtractor
 from .core.terminal_render import TerminalRenderer
 
@@ -74,3 +77,45 @@ class Player:
                         yield (timestamp, ansi_output)
 
                 frame_count += 1
+
+    def frames(self, video_path: str) -> Iterator[Tuple[float, str]]:
+        """Generate raw frame data without timing delays.
+
+        Args:
+            video_path: Path to video file
+
+        Yields:
+            Tuples of (timestamp_seconds, ansi_escape_sequences)
+        """
+        for timestamp, ansi_output in self.play(video_path):
+            yield timestamp, ansi_output
+
+    def cast_entries(self, video_path: str) -> Iterator[str]:
+        """Generate .cast file entries (JSON lines).
+
+        Args:
+            video_path: Path to video file
+
+        Yields:
+            JSON strings for .cast file format
+        """
+        first_frame = True
+
+        for timestamp, ansi_output in self.frames(video_path):
+            if first_frame:
+                # Write asciinema header with actual video dimensions
+                header = {
+                    "version": 2,
+                    "width": self.width,
+                    "height": self.height,
+                    "timestamp": int(time.time()),
+                    "title": f"plansi - {os.path.basename(video_path)}",
+                }
+                yield json.dumps(header)
+                first_frame = False
+
+            # Skip empty output lines
+            if ansi_output.strip():
+                # Write cast entry: [timestamp, "o", data] with formatted timestamp
+                cast_entry = [float(f"{timestamp:.4f}"), "o", ansi_output]
+                yield json.dumps(cast_entry)

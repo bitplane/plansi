@@ -1,7 +1,6 @@
 """Command-line interface for plansi."""
 
 import argparse
-import json
 import os
 import sys
 import time
@@ -50,7 +49,7 @@ def main():
 
         if args.output:
             # Write to .cast file
-            write_cast_file(player, args.video, args.output, args.width)
+            write_cast_file(player, args.video, args.output)
         else:
             # Play to console
             play_to_console(player, args.video)
@@ -68,7 +67,7 @@ def play_to_console(player: Player, video_path: str):
     """Play video to console with timing."""
     last_timestamp = 0.0
 
-    for timestamp, ansi_output in player.play(video_path):
+    for timestamp, ansi_output in player.frames(video_path):
         # Sleep to maintain timing
         if timestamp > last_timestamp:
             sleep_time = timestamp - last_timestamp
@@ -81,29 +80,11 @@ def play_to_console(player: Player, video_path: str):
         last_timestamp = timestamp
 
 
-def write_cast_file(player: Player, video_path: str, output_path: str, width: int):
+def write_cast_file(player: Player, video_path: str, output_path: str):
     """Write video to .cast file format."""
     with open(output_path, "w") as cast_file:
-        first_frame = True
-
-        for timestamp, ansi_output in player.play(video_path):
-            if first_frame:
-                # Write asciinema header with actual video dimensions
-                header = {
-                    "version": 2,
-                    "width": width,
-                    "height": player.height,
-                    "timestamp": int(time.time()),
-                    "title": f"plansi - {os.path.basename(video_path)}",
-                }
-                cast_file.write(json.dumps(header) + "\n")
-                first_frame = False
-
-            # Skip empty output lines
-            if ansi_output.strip():
-                # Write cast entry: [timestamp, "o", data] with formatted timestamp
-                cast_entry = [float(f"{timestamp:.4f}"), "o", ansi_output]
-                cast_file.write(json.dumps(cast_entry) + "\n")
+        for cast_line in player.cast_entries(video_path):
+            cast_file.write(cast_line + "\n")
 
         print(f"Wrote cast file: {output_path}", file=sys.stderr)
 
