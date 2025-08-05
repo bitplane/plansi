@@ -4,7 +4,6 @@ from PIL import Image
 from typing import Set, Tuple
 import tempfile
 import os
-import sys
 import math
 from chafa import (
     Canvas,
@@ -26,7 +25,7 @@ class TerminalRenderer:
     - Diff the buffers and output only changed cells
     """
 
-    def __init__(self, width: int, height: int, color_threshold: float = 30.0, debug: bool = False):
+    def __init__(self, width: int, height: int, color_threshold: float = 5.0, debug: bool = False):
         """Initialize terminal renderer.
 
         Args:
@@ -91,33 +90,72 @@ class TerminalRenderer:
         """Calculate contrast between foreground and background colors.
 
         Args:
-            fg_color: RGB tuple (r, g, b) or None
-            bg_color: RGB tuple (r, g, b) or None
+            fg_color: RGB tuple (r, g, b)
+            bg_color: RGB tuple (r, g, b)
 
         Returns:
             Contrast value (0.0 to ~441.67)
         """
-        if fg_color is None or bg_color is None:
-            return 0.0  # No contrast if either color is missing
         return self._color_distance(fg_color, bg_color)
 
-    def _color_distance(self, color1: tuple, color2: tuple) -> float:
-        """Calculate Euclidean distance between two RGB colors.
+    def _rgb_to_lab(self, rgb: tuple) -> tuple:
+        """Convert RGB to LAB color space for perceptual color comparison.
 
         Args:
-            color1: RGB tuple (r, g, b) or None
-            color2: RGB tuple (r, g, b) or None
+            rgb: RGB tuple (r, g, b) with values 0-255
 
         Returns:
-            Distance between colors (0.0 to ~441.67 for max RGB distance)
+            LAB tuple (L, a, b) where L is 0-100, a and b are roughly -128 to +128
         """
-        if color1 is None or color2 is None:
-            # If either color is None, treat as maximum distance if the other isn't None
-            return 441.67 if (color1 is None) != (color2 is None) else 0.0
+        r, g, b = rgb
 
-        r1, g1, b1 = color1
-        r2, g2, b2 = color2
-        return math.sqrt((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2)
+        # Normalize RGB to 0-1
+        r, g, b = r / 255.0, g / 255.0, b / 255.0
+
+        # Convert to linear RGB (gamma correction)
+        def gamma_correct(c):
+            return c / 12.92 if c <= 0.04045 else pow((c + 0.055) / 1.055, 2.4)
+
+        r, g, b = gamma_correct(r), gamma_correct(g), gamma_correct(b)
+
+        # Convert to XYZ using sRGB matrix
+        x = r * 0.4124564 + g * 0.3575761 + b * 0.1804375
+        y = r * 0.2126729 + g * 0.7151522 + b * 0.0721750
+        z = r * 0.0193339 + g * 0.1191920 + b * 0.9503041
+
+        # Normalize by D65 white point
+        x, y, z = x / 0.95047, y / 1.00000, z / 1.08883
+
+        # Convert to LAB
+        def xyz_to_lab_component(t):
+            return pow(t, 1 / 3) if t > 0.008856 else (7.787 * t + 16 / 116)
+
+        fx, fy, fz = xyz_to_lab_component(x), xyz_to_lab_component(y), xyz_to_lab_component(z)
+
+        L = 116 * fy - 16
+        a = 500 * (fx - fy)
+        b = 200 * (fy - fz)
+
+        return (L, a, b)
+
+    def _color_distance(self, color1: tuple, color2: tuple) -> float:
+        """Calculate perceptual distance between two RGB colors using LAB color space.
+
+        Args:
+            color1: RGB tuple (r, g, b)
+            color2: RGB tuple (r, g, b)
+
+        Returns:
+            Perceptual distance between colors (Delta E in LAB space)
+        """
+        lab1 = self._rgb_to_lab(color1)
+        lab2 = self._rgb_to_lab(color2)
+
+        L1, a1, b1 = lab1
+        L2, a2, b2 = lab2
+
+        # Delta E CIE76 formula
+        return math.sqrt((L1 - L2) ** 2 + (a1 - a2) ** 2 + (b1 - b2) ** 2)
 
     def _quantize_rgb(self, color: tuple) -> tuple:
         """Quantize RGB color to reduce noise from dithering artifacts.
@@ -128,8 +166,6 @@ class TerminalRenderer:
         Returns:
             Quantized RGB tuple
         """
-        if color is None:
-            return None
         # Reduce from 8-bit to 5-bit per channel (32 levels each)
         r, g, b = color
         return (r // 8 * 8, g // 8 * 8, b // 8 * 8)
@@ -141,19 +177,26 @@ class TerminalRenderer:
             color_obj: bittty color object
 
         Returns:
-            RGB tuple (r, g, b) or None if no color
+            RGB tuple (r, g, b) - defaults to black if no color
         """
         if not color_obj or not hasattr(color_obj, "value") or not color_obj.value:
-            return None
+            return (0, 0, 0)  # Default to black
 
         if hasattr(color_obj.value, "__iter__") and len(color_obj.value) == 3:
             # Extract and quantize the color
             return self._quantize_rgb(tuple(color_obj.value))
 
-        return None
+        return (0, 0, 0)  # Default to black if can't extract
 
     def _visual_difference(self, cell1: tuple, cell2: tuple) -> float:
-        """Calculate visual difference between two cells in perceptual space.
+        """Calculate visual difference between two cells based on human perception.
+
+        Algorithm:
+        1. Check if cells are identical (early exit)
+        2. Handle inverse video by flipping fg/bg for comparison
+        3. Calculate contrast between fg and bg for each cell
+        4. If glyph differs, weight by contrast (more contrast = more visible difference)
+        5. Multiply by perceptual color difference between the cells
 
         Args:
             cell1: (Style, char) from first cell
@@ -165,35 +208,27 @@ class TerminalRenderer:
         style1, char1 = cell1
         style2, char2 = cell2
 
-        # Quick check for identical cells
-        if char1 == char2 and style1 == style2:
-            return 0.0
-
         # Extract colors
         fg1 = self._extract_rgb_color(style1.fg)
         bg1 = self._extract_rgb_color(style1.bg)
         fg2 = self._extract_rgb_color(style2.fg)
         bg2 = self._extract_rgb_color(style2.bg)
 
-        # Normalize color distances to 0-1 range (max RGB distance is ~441)
-        fg_diff = self._color_distance(fg1, fg2) / 441.67
-        bg_diff = self._color_distance(bg1, bg2) / 441.67
+        # Quick check for identical cells (compare actual color values and chars)
+        if char1 == char2 and fg1 == fg2 and bg1 == bg2 and style1.reverse == style2.reverse:
+            return 0.0
 
-        # Glyph difference (binary: 0 or 1)
-        glyph_weight = 1.0 if char1 != char2 else 0.0
+        # Handle inverse video by flipping fg/bg for comparison
+        if style1.reverse:
+            fg1, bg1 = bg1, fg1
+        if style2.reverse:
+            fg2, bg2 = bg2, fg2
 
-        # Contrast differences (normalized)
-        contrast1 = self._contrast(fg1, bg1) / 441.67
-        contrast2 = self._contrast(fg2, bg2) / 441.67
-        contrast_diff = abs(contrast1 - contrast2)
-
-        # Simple balanced weights as suggested by GPT
-        total_diff = (
-            0.5 * glyph_weight  # Glyph changes matter most
-            + 0.25 * fg_diff  # Foreground color
-            + 0.25 * bg_diff  # Background color
-            + 0.25 * contrast_diff  # Contrast changes
-        )
+        # Calculate perceptual color difference between the two cells
+        # Use the average of fg and bg differences
+        fg_color_diff = min(self._color_distance(fg1, fg2) / 200.0, 1.0)
+        bg_color_diff = min(self._color_distance(bg1, bg2) / 200.0, 1.0)
+        total_diff = (fg_color_diff + bg_color_diff) / 2.0
 
         # Scale by 100 to make threshold more intuitive (default 30 = 30% difference)
         return total_diff * 100.0
@@ -254,12 +289,16 @@ class TerminalRenderer:
         Returns:
             Tuple of (ANSI string with cursor movements and cell updates, number of changed cells)
         """
+        # Initialize primary buffer on first call to match cleared terminal
+        if not hasattr(self, "_initialized"):
+            self._initialize_primary_buffer()
+            self._initialized = True
+
         # Render new frame with chafa
         full_ansi = self._render_full_frame(image)
 
         # Switch to alt buffer and render new frame
         self.terminal.alternate_screen_on()
-        self.terminal.clear_screen()
         self.terminal.parser.feed(full_ansi)
 
         # Compare main buffer (current state) vs alt buffer (new frame)
@@ -278,15 +317,6 @@ class TerminalRenderer:
                     changed_positions.append((col, row))
                 else:
                     same_cells += 1
-
-        if self.debug:
-            print(
-                f"DEBUG: {len(changed_positions)} cells changed, {same_cells} cells same (out of {total_cells} total)",
-                file=sys.stderr,
-            )
-            # Show which rows have content
-            rows_with_content = set(row for col, row in changed_positions)
-            print(f"DEBUG: rows with content: {sorted(rows_with_content)}", file=sys.stderr)
 
         # Build output for changed cells only
         if not changed_positions:
@@ -308,7 +338,8 @@ class TerminalRenderer:
             output_parts.append(cell_ansi)
 
             # Update main buffer to match what we're sending
-            self.terminal.primary_buffer.set_cell(col, row, alt_cell[0], alt_cell[1])
+            alt_style, alt_char = alt_cell
+            self.terminal.primary_buffer.set_cell(col, row, alt_char, alt_style)
 
         # Switch back to main buffer
         self.terminal.alternate_screen_off()
@@ -321,3 +352,14 @@ class TerminalRenderer:
         self.terminal.alternate_screen_on()
         self.terminal.clear_screen()  # Clear alt buffer
         self.terminal.alternate_screen_off()
+
+    def _initialize_primary_buffer(self):
+        """Initialize primary buffer to match cleared terminal state."""
+        # Fill primary buffer with empty cells (space char, no colors)
+        # Get a sample empty style from an existing cell
+        sample_cell = self.terminal.primary_buffer.get_cell(0, 0)
+        empty_style = sample_cell[0]  # Use existing style as template
+
+        for row in range(self.height):
+            for col in range(self.width):
+                self.terminal.primary_buffer.set_cell(col, row, empty_style, " ")

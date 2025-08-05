@@ -1,6 +1,7 @@
 """Command-line interface for plansi."""
 
 import argparse
+import os
 import sys
 import time
 from .player import Player
@@ -10,14 +11,26 @@ def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(description="Play videos as differential ANSI in terminal")
     parser.add_argument("video", help="Path to video file")
-    parser.add_argument("--width", "-w", type=int, default=80, help="Terminal width in characters (default: 80)")
+    # Auto-detect terminal width
+    try:
+        default_width = os.get_terminal_size().columns
+    except OSError:
+        default_width = 80  # Fallback if not in a terminal
+
+    parser.add_argument(
+        "--width",
+        "-w",
+        type=int,
+        default=default_width,
+        help=f"Terminal width in characters (default: auto-detected {default_width})",
+    )
     parser.add_argument("--fps", "-f", type=float, default=None, help="Target FPS (default: original video rate)")
     parser.add_argument(
-        "--color-threshold",
-        "-c",
+        "--threshold",
+        "-t",
         type=float,
-        default=30.0,
-        help="RGB color distance threshold for cell changes (default: 30.0)",
+        default=5.0,
+        help="Perceptual color difference threshold for cell changes (default: 5.0)",
     )
     parser.add_argument("--no-diff", action="store_true", help="Disable differential rendering, output full frames")
     parser.add_argument("--debug", action="store_true", help="Show debug information about cell comparisons")
@@ -27,7 +40,7 @@ def main():
     try:
         player = Player(
             width=args.width,
-            color_threshold=args.color_threshold,
+            color_threshold=args.threshold,
             fps=args.fps,
             no_diff=args.no_diff,
             debug=args.debug,

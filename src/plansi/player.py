@@ -11,7 +11,7 @@ class Player:
     def __init__(
         self,
         width: int = 80,
-        color_threshold: float = 30.0,
+        color_threshold: float = 5.0,
         fps: float = None,
         no_diff: bool = False,
         debug: bool = False,
@@ -54,16 +54,20 @@ class Player:
                 if self.no_diff:
                     # No differential rendering - output full frame
                     full_ansi = renderer._render_full_frame(frame)
-                    status = f"\x1b[0m\x1b[{extractor.height + 1};1HFrame: {frame_count}, Mode: full{' ' * 20}"
-                    yield (timestamp, f"\x1b[H{full_ansi}{status}")
+                    if self.debug:
+                        status = f"\x1b[0m\x1b[{extractor.height + 1};1HFrame: {frame_count}, Mode: full{' ' * 20}"
+                        yield (timestamp, f"\x1b[H{full_ansi}{status}")
+                    else:
+                        yield (timestamp, f"\x1b[H{full_ansi}")
                 else:
                     # Differential rendering
                     ansi_output, num_changed = renderer.render_differential(frame, set())
 
-                    # Add status line
-                    status = (
-                        f"\x1b[0m\x1b[{extractor.height + 1};1HFrame: {frame_count}, Changed: {num_changed}{' ' * 20}"
-                    )
-                    yield (timestamp, f"{ansi_output}{status}")
+                    # Add status line only in debug mode
+                    if self.debug:
+                        status = f"\x1b[0m\x1b[{extractor.height + 1};1HFrame: {frame_count}, Changed: {num_changed}{' ' * 20}"
+                        yield (timestamp, f"{ansi_output}{status}")
+                    else:
+                        yield (timestamp, ansi_output)
 
                 frame_count += 1
