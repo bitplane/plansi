@@ -1,6 +1,11 @@
 """plansi - Plays videos as differential ANSI in terminals."""
 
+from importlib.metadata import version, PackageNotFoundError
 from .player import Player
 
-__version__ = "0.0.1"
-__all__ = ["Player"]
+try:
+    __version__ = version("plansi")
+except PackageNotFoundError:
+    __version__ = "unknown"
+
+__all__ = ["Player", "__version__"]
