@@ -3,7 +3,6 @@
 import argparse
 import os
 import sys
-import time
 from .player import Player
 
 
@@ -39,20 +38,28 @@ def main():
     args = parser.parse_args()
 
     try:
-        player = Player(
-            width=args.width,
-            color_threshold=args.threshold,
-            fps=args.fps,
-            no_diff=args.no_diff,
-            debug=args.debug,
-        )
-
         if args.output:
-            # Write to .cast file
-            write_cast_file(player, args.video, args.output)
+            # Write to .cast file - use non-realtime to process every frame
+            cast_player = Player(
+                width=args.width,
+                color_threshold=args.threshold,
+                fps=args.fps,
+                no_diff=args.no_diff,
+                debug=args.debug,
+                realtime=False,  # Process every frame for complete recording
+            )
+            write_cast_file(cast_player, args.video, args.output)
         else:
-            # Play to console
-            play_to_console(player, args.video)
+            # Play to console - use realtime to skip frames as needed
+            console_player = Player(
+                width=args.width,
+                color_threshold=args.threshold,
+                fps=args.fps,
+                no_diff=args.no_diff,
+                debug=args.debug,
+                realtime=True,  # Skip frames to maintain timing
+            )
+            play_to_console(console_player, args.video)
 
     except KeyboardInterrupt:
         # Clean exit on Ctrl+C
@@ -64,20 +71,11 @@ def main():
 
 
 def play_to_console(player: Player, video_path: str):
-    """Play video to console with timing."""
-    last_timestamp = 0.0
-
+    """Play video to console (timing handled by Player.play() with realtime flag)."""
     for timestamp, ansi_output in player.frames(video_path):
-        # Sleep to maintain timing
-        if timestamp > last_timestamp:
-            sleep_time = timestamp - last_timestamp
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-
-        # Output ANSI to terminal
+        # Output ANSI to terminal (no sleep needed - timing handled in Player.play())
         sys.stdout.write(ansi_output)
         sys.stdout.flush()
-        last_timestamp = timestamp
 
 
 def write_cast_file(player: Player, video_path: str, output_path: str):

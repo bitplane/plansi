@@ -4,6 +4,7 @@ from typing import Iterator, Tuple
 import json
 import time
 import os
+import sys
 from .core.video import VideoExtractor
 from .core.terminal_render import TerminalRenderer
 
@@ -18,6 +19,7 @@ class Player:
         fps: float = None,
         no_diff: bool = False,
         debug: bool = False,
+        realtime: bool = True,
     ):
         """Initialize video player.
 
@@ -26,12 +28,15 @@ class Player:
             color_threshold: RGB distance threshold for color changes (0.0-441.0)
             fps: Target playback FPS, None for original rate
             no_diff: Disable differential rendering
+            debug: Enable debug output
+            realtime: Skip frames to maintain real-time playback (True for console, False for cast files)
         """
         self.width = width
         self.color_threshold = color_threshold
         self.fps = fps
         self.no_diff = no_diff
         self.debug = debug
+        self.realtime = realtime
 
     def play(self, video_path: str) -> Iterator[Tuple[float, str]]:
         """Generate (timestamp, ansi_str) tuples for video playbook.
@@ -43,6 +48,8 @@ class Player:
             Tuples of (timestamp_seconds, ansi_escape_sequences)
         """
         frame_count = 0
+        skipped_frames = 0
+        start_time = time.time() if self.realtime else None
 
         with VideoExtractor(video_path, self.width, self.fps) as extractor:
             # Store height for external access
@@ -57,6 +64,25 @@ class Player:
             yield (0.0, clear_screen)
 
             for timestamp, frame in extractor.frames():
+                # Frame skipping and timing logic for real-time playback
+                if self.realtime:
+                    current_time = time.time() - start_time
+                    if current_time > timestamp:
+                        # Skip this frame - we're running behind
+                        skipped_frames += 1
+                        frame_count += 1
+                        continue
+                    else:
+                        # Wait until it's time to show this frame
+                        sleep_time = timestamp - current_time
+                        if sleep_time > 0:
+                            time.sleep(sleep_time)
+
+                        if skipped_frames > 0 and self.debug:
+                            # Report skipped frames when we catch up
+                            print(f"Skipped {skipped_frames} frames", file=sys.stderr)
+                            skipped_frames = 0
+
                 if self.no_diff:
                     # No differential rendering - output full frame
                     full_ansi = renderer._render_full_frame(frame)
