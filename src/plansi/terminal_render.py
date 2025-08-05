@@ -276,8 +276,14 @@ class TerminalRenderer:
             main_cell: (Style, char) from main buffer
             alt_cell: (Style, char) from alt buffer
         """
-        visual_diff = self._visual_difference(main_cell, alt_cell)
+        # Optimization: if threshold is 0, skip expensive calculations
+        # and just check if cells are identical
+        if self.color_threshold == 0.0:
+            style1, char1 = main_cell
+            style2, char2 = alt_cell
+            return not (char1 == char2 and style1 == style2)
 
+        visual_diff = self._visual_difference(main_cell, alt_cell)
         return visual_diff > self.color_threshold
 
     def _generate_cursor_movement(self, target_col: int, target_row: int) -> str:
