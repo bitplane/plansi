@@ -9,10 +9,10 @@ readme = "README.md"
 requires-python = ">=3.10"
 
 dependencies = [
-    "chafa.py",
-    "av",
-    "Pillow",
-    "bittty==0.0.5"
+    "bittty==0.0.5",
+    "chafa.py~=1.2",
+    "av~=15.0",
+    "Pillow~=11.3"
 ]
 
 [project.scripts]
