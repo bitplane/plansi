@@ -3,6 +3,7 @@
 from .base import Pipe
 from .read_video import VideoReader
 from .read_cast import CastReader
+from .read_ansi import AnsiReader
 from .write_cast import CastWriter
 from .write_file import FileWriter
 from .image_to_ansi import ImageToAnsi
@@ -13,6 +14,7 @@ __all__ = [
     "Pipe",
     "VideoReader",
     "CastReader",
+    "AnsiReader",
     "CastWriter",
     "FileWriter",
     "ImageToAnsi",

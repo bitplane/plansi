@@ -64,6 +64,7 @@ def parse_args(argv=sys.argv[1:]):
     parser.add_argument(
         "--debug", action="store_true", help="Show debug information with frame stats and processing details"
     )
+    parser.add_argument("--debug-args", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
         "--cache-position",
         action="store_true",
@@ -103,6 +104,7 @@ def parse_args(argv=sys.argv[1:]):
     # Set implied defaults using helper functions
     _set_input_format(args)
     _set_output_flags(args)
+    _set_debug(args)
     _set_realtime(args)
     _set_perceptual(args)
 
@@ -135,6 +137,13 @@ def _set_output_flags(args):
     """Set output-related flags."""
     # Set stdout flag based on output destination
     args.stdout = Implied(True) if args.output == "-" and implied(args.output) else False
+
+
+def _set_debug(args):
+    """Set debug flag based on log file and debug args."""
+    # --log-file or --debug-args implies --debug
+    if args.log_file or args.debug_args:
+        args.debug = Implied(True, args.debug)
 
 
 def _set_realtime(args):

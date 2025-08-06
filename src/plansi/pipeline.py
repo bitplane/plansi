@@ -1,7 +1,7 @@
 """Pipeline building for plansi."""
 
 import os
-from .pipe import VideoReader, ImageToAnsi, CastWriter, CastReader, AnsiBuffer, FileWriter, TerminalPlayer
+from .pipe import VideoReader, ImageToAnsi, CastWriter, CastReader, AnsiReader, AnsiBuffer, FileWriter, TerminalPlayer
 
 
 def get_input(args):
@@ -11,15 +11,18 @@ def get_input(args):
         args: Parsed command-line arguments
 
     Returns:
-        Pipe: Input pipeline (CastReader or VideoReader -> ImageToAnsi)
+        Pipe: Input pipeline (CastReader, AnsiReader, or VideoReader -> ImageToAnsi)
     """
     # Create input list for source pipe
     input_list = [(0.0, args.input)]
 
-    # Determine input type and create appropriate reader
-    if args.input.endswith(".cast"):
+    # Determine input type based on detected format
+    if args.input_format == "cast":
         # Cast file input
         return CastReader(input_list, args)
+    elif args.input_format == "ansi":
+        # ANSI data input (usually stdin)
+        return AnsiReader(input_list, args)
     else:
         # Video file input - convert to ANSI
         video = VideoReader(input_list, args)

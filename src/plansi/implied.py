@@ -5,9 +5,15 @@ class Implied:
     def __new__(cls, default, specified=None):
         if specified is not None:
             return type(specified)(specified)
+        # Prevent double wrapping - if default is already Implied, just return it
+        if implied(default):
+            return default
         return super().__new__(cls)
 
     def __init__(self, value, specified=None):
+        # Don't set _value if we're the same object (no double wrapping case)
+        if self is value:
+            return
         self._value = value
 
     def __str__(self):
@@ -41,6 +47,8 @@ def forward(name):
 # Mapping from dunder name to operator function
 _operator_map = {
     "__bool__": operator.truth,
+    "__int__": int,
+    "__index__": operator.index,
     "__len__": operator.length_hint,  # or len, but this handles fallbacks
     "__getitem__": operator.getitem,
     "__setitem__": operator.setitem,

@@ -85,6 +85,16 @@ def test_implied_arithmetic():
     # assert 100 - val == 90
 
 
+def test_implied_int_conversion():
+    """Test int() conversion for use with range() etc."""
+    val = Implied(42)
+    assert int(val) == 42
+
+    # Test with range() - this should work now
+    result = list(range(Implied(3)))
+    assert result == [0, 1, 2]
+
+
 def test_implied_container_operations():
     """Test container-like operations."""
     val = Implied([1, 2, 3])
@@ -128,6 +138,17 @@ def test_implied_detection():
     # Values returned when specified is given should not be implied
     assert implied(Implied(False, True)) is False
     assert implied(Implied("default", "actual")) is False
+
+
+def test_implied_no_double_wrapping():
+    """Test that Implied doesn't double-wrap already implied values."""
+    inner = Implied(42)
+    outer = Implied(inner)
+
+    # Should return the same object, not double-wrapped
+    assert outer is inner
+    assert implied(outer) is True
+    assert str(outer) == "42 (implied)"  # Should still show as implied once
 
 
 def test_implied_boolean_context():
