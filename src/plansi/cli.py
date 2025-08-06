@@ -7,7 +7,7 @@ import os
 import sys
 from . import __version__
 from .control_codes import SHOW_CURSOR, RESTORE_TERMINAL
-from .pipe import VideoSplitter, ImageToAnsi, AnsiToCast, CastToAnsi, FileSink, TerminalPlayer
+from .pipe import VideoReader, ImageToAnsi, CastWriter, CastReader, AnsiBuffer, FileWriter, TerminalPlayer
 
 
 def restore_cursor():
@@ -39,7 +39,26 @@ def main():
         help=f"Terminal width in characters (default: auto-detected {default_width})",
     )
     parser.add_argument("--fps", "-f", type=float, default=None, help="Target FPS (default: original video rate)")
-    parser.add_argument("--debug", action="store_true", help="Show debug information")
+    parser.add_argument(
+        "--threshold",
+        "-t",
+        type=float,
+        default=5.0,
+        help="Perceptual color difference threshold for cell changes (default: 5.0)",
+    )
+    parser.add_argument("--no-diff", default=False, action="store_true", help="Disable differential rendering")
+    parser.add_argument("--debug", default=False, action="store_true", help="Show debug information")
+    parser.add_argument(
+        "--cache-position", default=False, action="store_true", help="Enable cursor position caching (experimental)"
+    )
+    parser.add_argument(
+        "--no-cache-style",
+        dest="cache_style",
+        default=True,
+        action="store_false",
+        help="Disable style caching optimization",
+    )
+    parser.add_argument("--log-file", default=None, help="Log debug messages to file")
 
     args = parser.parse_args()
 
@@ -47,38 +66,27 @@ def main():
         # Determine input type
         is_cast_input = args.input.endswith(".cast")
 
+        # Create input list for source pipe
+        input_list = [(0.0, args.input)]
+
         if is_cast_input:
             # Cast file input - play or convert
-            # Start with a single input tuple
-            source = iter([(0.0, args.input)])
-            pipeline = CastToAnsi(source)
-
-            # Store dimensions for output
-            width = None
-            height = None
+            pipeline = CastReader(input_list, args)
         else:
             # Video file input - convert to ANSI
-            # Start with a single input tuple
-            source = iter([(0.0, args.input)])
-
-            # Build video processing pipeline
-            video = VideoSplitter(source, fps=args.fps)
-            pipeline = ImageToAnsi(video, width=args.width)
-
-            # Calculate height for terminal output
-            # Will be set by ImageToAnsi on first frame
-            width = args.width
-            height = None
+            video = VideoReader(input_list, args)
+            pipeline = ImageToAnsi(video, args)
 
         if args.output:
             # Output to .cast file
             if not is_cast_input:
                 # Need to convert ANSI to cast format
-                cast = AnsiToCast(pipeline, width=width, title=f"plansi - {os.path.basename(args.input)}")
-                sink = FileSink(cast, filepath=args.output)
+                args.title = f"plansi - {os.path.basename(args.input)}"
+                cast = CastWriter(pipeline, args)
+                sink = FileWriter(cast, args)
             else:
                 # Direct copy of cast file
-                sink = FileSink(pipeline, filepath=args.output)
+                sink = FileWriter(pipeline, args)
 
             # Process pipeline
             for _ in sink:
@@ -86,30 +94,21 @@ def main():
 
             print(f"Wrote cast file: {args.output}", file=sys.stderr)
         else:
-            # Play to terminal
-            # Get dimensions from first frame if needed
-            if is_cast_input:
-                # Peek at first frame to get dimensions from cast file
-                # This is a bit hacky but works for now
-                peek_source = iter([(0.0, args.input)])
-                peek_pipe = CastToAnsi(peek_source)
-                with peek_pipe:
-                    # CastToAnsi stores dimensions in args after reading header
-                    for _ in peek_pipe:
-                        break  # Just need to trigger header read
-                    width = peek_pipe.args.get("width", 80)
-                    height = peek_pipe.args.get("height", 24)
+            # Apply differential rendering unless disabled (only for terminal output)
+            if not args.no_diff and not is_cast_input:
+                # For video, use calculated dimensions
+                args.height = int(args.width * 9 / 16 * 0.5)  # Assume 16:9 for now
+                pipeline = AnsiBuffer(pipeline, args)
 
-                # Create fresh pipeline for actual playback
-                source = iter([(0.0, args.input)])
-                pipeline = CastToAnsi(source)
-            else:
-                # For video, height will be calculated by ImageToAnsi
-                # Use a reasonable default for now
-                height = int(args.width * 9 / 16 * 0.5)  # Assume 16:9 aspect ratio
+            # Play to terminal
+            # For cast files, dimensions should already be set by CastReader
+            # For video files, dimensions should be set by ImageToAnsi
+            if not hasattr(args, "height"):
+                args.height = int(args.width * 9 / 16 * 0.5)  # Fallback estimate
 
             # Create terminal player
-            player = TerminalPlayer(pipeline, realtime=True, debug=args.debug, width=width, height=height)
+            args.realtime = True
+            player = TerminalPlayer(pipeline, args)
 
             # Play pipeline
             for _ in player:
@@ -119,8 +118,8 @@ def main():
         # Clean exit on Ctrl+C
         print(RESTORE_TERMINAL, flush=True)
         sys.exit(0)
-    except Exception as e:
+    except Exception:
         # Restore cursor on any error
         print(RESTORE_TERMINAL, flush=True)
-        print(f"\nError: {e}", file=sys.stderr)
-        sys.exit(1)
+        # Let the exception propagate with full stack trace
+        raise

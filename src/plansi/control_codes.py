@@ -6,6 +6,7 @@ providing well-named constants that are self-documenting and easy to maintain.
 
 # Terminal setup and cleanup
 CLEAR_SCREEN = "\x1b[2J"
+CLEAR_TO_EOL = "\x1b[K"
 HOME_CURSOR = "\x1b[H"
 HIDE_CURSOR = "\x1b[?25l"
 SHOW_CURSOR = "\x1b[?25h"

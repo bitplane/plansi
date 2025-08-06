@@ -1,4 +1,4 @@
-"""ANSI conversion and processing pipes."""
+"""Image to ANSI converter pipe."""
 
 from typing import Iterator, Tuple, Any
 from chafa import PixelMode, DitherMode, PixelType, Canvas, ColorSpace, CanvasConfig, CanvasMode
@@ -15,8 +15,8 @@ class ImageToAnsi(Pipe):
 
     def setup(self):
         """Initialize Chafa canvas."""
-        # Get dimensions from args or use defaults
-        self.width = self.args.get("width", 80)
+        # Get dimensions from args
+        self.width = getattr(self.args, "width", 80)
 
         # Will calculate height on first frame to maintain aspect ratio
         self.canvas = None
@@ -27,15 +27,7 @@ class ImageToAnsi(Pipe):
         self.canvas = None
 
     def process(self, timestamp: float, data: Any) -> Iterator[Tuple[float, str]]:
-        """Convert image to ANSI.
-
-        Args:
-            timestamp: Frame timestamp
-            data: PIL Image
-
-        Yields:
-            (timestamp, ansi_string) with full frame ANSI
-        """
+        """Convert image to ANSI."""
         img = data
 
         # Initialize canvas on first frame
@@ -45,6 +37,10 @@ class ImageToAnsi(Pipe):
             img_width, img_height = img.size
             aspect_ratio = img_height / img_width
             self.height = int(self.width * aspect_ratio * 0.5)
+
+            # Update args with calculated height
+            if hasattr(self.args, "__dict__"):
+                self.args.height = self.height
 
             # Configure Chafa
             config = CanvasConfig()
@@ -60,6 +56,8 @@ class ImageToAnsi(Pipe):
             self.canvas = Canvas(config)
             self.canvas.width = self.width
             self.canvas.height = self.height
+
+            self.debug("canvas", f"{self.width}x{self.height}")
 
         # Render image to ANSI
         width, height = img.size

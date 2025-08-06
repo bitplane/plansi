@@ -1,6 +1,7 @@
 """Base Pipe class for composable pipeline stages."""
 
-from typing import Iterator, Tuple, Any, Optional
+import os
+from typing import Iterator, Tuple, Any
 
 
 class Pipe:
@@ -10,25 +11,22 @@ class Pipe:
     for processing input streams. Subclasses implement process() to transform data.
     """
 
-    def __init__(self, input_pipe: Optional[Iterator[Tuple[float, Any]]] = None, **kwargs):
-        """Initialize pipe with optional input and arguments.
+    def __init__(self, input_pipe, args=None):
+        """Initialize pipe with input and arguments.
 
         Args:
-            input_pipe: Optional input iterator of (timestamp, data) tuples
-            **kwargs: Additional arguments available as self.args
+            input_pipe: Input iterator of (timestamp, data) tuples
+            args: Parsed arguments namespace from argparse
         """
         self.input = input_pipe
-        self.args = kwargs
+        self.args = args or {}
+        self.debug_msg = {}
 
     def __iter__(self):
         """Generate output by processing input through this stage."""
         with self:  # Use self as context manager
-            if self.input is None:
-                # Source pipe - generate initial data
-                yield from self.process(None, None)
-            else:
-                for timestamp, data in self.input:
-                    yield from self.process(timestamp, data)
+            for timestamp, data in self.input:
+                yield from self.process(timestamp, data)
 
     def __enter__(self):
         """Enter context and call setup."""
@@ -46,6 +44,26 @@ class Pipe:
     def teardown(self):
         """Override to clean up resources."""
         pass
+
+    def debug(self, key: str, value: str):
+        """Store debug message for display later."""
+        self.debug_msg[key] = str(value)
+
+        # Log to file if specified
+        if hasattr(self.args, "log_file") and self.args.log_file:
+            log_msg = f"{type(self).__name__}.{key}: {value}\n"
+            os.makedirs(os.path.dirname(self.args.log_file), exist_ok=True)
+            with open(self.args.log_file, "a") as f:
+                f.write(log_msg)
+
+    def all_debug_msgs(self) -> str:
+        msg = ""
+        if hasattr(self.input, "all_debug_msgs"):
+            msg += self.input.all_debug_msgs() + "\n"
+        class_name = type(self).__name__
+        for key, value in self.debug_msg.items():
+            msg += f"{class_name}.{key}: {value}\n"
+        return msg.rstrip("\n")
 
     def process(self, timestamp: float, data: Any) -> Iterator[Tuple[float, Any]]:
         """Process input and yield output tuples.

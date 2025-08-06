@@ -1,4 +1,4 @@
-"""Video processing pipes."""
+"""Video reader pipe."""
 
 import av
 from typing import Iterator, Tuple, Any
@@ -7,7 +7,7 @@ from PIL import Image
 from .base import Pipe
 
 
-class VideoSplitter(Pipe):
+class VideoReader(Pipe):
     """Reads video files and outputs PIL Images at timestamps.
 
     Input: (timestamp, filepath) where filepath is path to video
@@ -25,15 +25,7 @@ class VideoSplitter(Pipe):
         self.containers.clear()
 
     def process(self, timestamp: float, data: Any) -> Iterator[Tuple[float, Image.Image]]:
-        """Extract frames from video file.
-
-        Args:
-            timestamp: Ignored (videos have their own timeline)
-            data: Path to video file
-
-        Yields:
-            (timestamp, PIL.Image) for each frame
-        """
+        """Extract frames from video file."""
         filepath = data
 
         # Open container if not cached
@@ -44,17 +36,27 @@ class VideoSplitter(Pipe):
         stream = container.streams.video[0]
 
         # Get target FPS if specified
-        target_fps = self.args.get("fps")
-        frame_interval = 1.0 / target_fps if target_fps else None
+
+        frame_interval = None
+        if self.args.fps:
+            frame_interval = 1.0 / self.args.fps
         last_time = 0.0
+        frame_count = 0
+        skipped_count = 0
+
+        self.debug("fps", self.args.fps or "original")
 
         # Decode frames
         for frame in container.decode(stream):
             frame_time = float(frame.time)
+            frame_count += 1
 
             # Skip frames if target FPS is lower than source
-            if frame_interval and (frame_time - last_time) < frame_interval:
+            if frame_interval and (frame_time - last_time) < (frame_interval * 0.9):
+                skipped_count += 1
                 continue
+
+            self.debug("processed", f"{frame_count}/{skipped_count}")
 
             # Convert to PIL Image
             img = frame.to_image()
@@ -65,3 +67,5 @@ class VideoSplitter(Pipe):
 
             yield frame_time, img
             last_time = frame_time
+
+        self.debug("total", f"{frame_count}/{skipped_count}")

@@ -1,13 +1,12 @@
-"""Asciicast format pipes for reading and writing .cast files."""
+"""Asciicast reader pipe."""
 
 import json
-import time
 from typing import Iterator, Tuple, Any
 
 from .base import Pipe
 
 
-class CastToAnsi(Pipe):
+class CastReader(Pipe):
     """Reads .cast files and outputs ANSI sequences.
 
     Input: (timestamp, filepath) where filepath is path to .cast file
@@ -15,15 +14,7 @@ class CastToAnsi(Pipe):
     """
 
     def process(self, timestamp: float, data: Any) -> Iterator[Tuple[float, str]]:
-        """Read cast file and yield ANSI data.
-
-        Args:
-            timestamp: Ignored (cast files have their own timeline)
-            data: Path to .cast file
-
-        Yields:
-            (timestamp, ansi_string) from cast entries
-        """
+        """Read cast file and yield ANSI data."""
         filepath = data
 
         with open(filepath, "r", encoding="utf-8") as f:
@@ -42,10 +33,14 @@ class CastToAnsi(Pipe):
                 raise ValueError(f"Unsupported cast version: {header.get('version')}")
 
             # Store dimensions in args for downstream pipes
-            self.args["width"] = header.get("width", 80)
-            self.args["height"] = header.get("height", 24)
+            if hasattr(self.args, "__dict__"):
+                self.args.width = header.get("width", 80)
+                self.args.height = header.get("height", 24)
+
+            self.debug(f"Cast file: {header.get('width', 80)}x{header.get('height', 24)}")
 
             # Process data lines
+            entry_count = 0
             for line_num, line in enumerate(f, 2):
                 line = line.strip()
                 if not line:
@@ -64,45 +59,7 @@ class CastToAnsi(Pipe):
 
                 # Only process output events
                 if event_type == "o":
+                    entry_count += 1
                     yield float(entry_time), ansi_data
 
-
-class AnsiToCast(Pipe):
-    """Converts ANSI sequences to .cast file format (JSON lines).
-
-    Input: (timestamp, ansi_string)
-    Output: (timestamp, json_string) for each line of the cast file
-    """
-
-    def setup(self):
-        """Track if header has been written."""
-        self.header_written = False
-
-    def process(self, timestamp: float, data: Any) -> Iterator[Tuple[float, str]]:
-        """Convert ANSI to cast format JSON.
-
-        Args:
-            timestamp: Frame timestamp
-            data: ANSI escape sequences
-
-        Yields:
-            (timestamp, json_string) for cast file lines
-        """
-        # Write header on first frame
-        if not self.header_written:
-            header = {
-                "version": 2,
-                "width": self.args.get("width", 80),
-                "height": self.args.get("height", 24),
-                "timestamp": int(time.time()),
-                "title": self.args.get("title", "plansi recording"),
-            }
-            yield 0.0, json.dumps(header)
-            self.header_written = True
-
-        # Skip empty output
-        ansi_string = data
-        if ansi_string and ansi_string.strip():
-            # Create cast entry: [timestamp, "o", data]
-            cast_entry = [float(f"{timestamp:.4f}"), "o", ansi_string]
-            yield timestamp, json.dumps(cast_entry)
+            self.debug(f"Cast read complete: {entry_count} entries")
