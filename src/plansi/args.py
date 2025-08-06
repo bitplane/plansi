@@ -20,9 +20,15 @@ def parse_args(argv=sys.argv[1:]):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    parser.add_argument("input", help="Input file: video (.mp4, .avi, etc), .cast file, or '-' for stdin")
     parser.add_argument(
-        "output", nargs="?", default=Implied("-"), help="Output .cast file, or '-' for stdout (default: stdout)"
+        "input",
+        help="Input source: video file (.mp4, .avi, .mov, etc), asciinema .cast recording, or '-' for data from stdin",
+    )
+    parser.add_argument(
+        "output",
+        nargs="?",
+        default=Implied("-"),
+        help="Output destination: .cast file for recording, or '-' for terminal playback (default: terminal)",
     )
 
     # Auto-detect terminal width
@@ -35,7 +41,7 @@ def parse_args(argv=sys.argv[1:]):
         "--width",
         "-w",
         type=int,
-        default=default_width,
+        default=Implied(default_width),
         help=f"Terminal width in characters (default: auto-detected {default_width})",
     )
     parser.add_argument(

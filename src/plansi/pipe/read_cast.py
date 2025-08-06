@@ -4,6 +4,7 @@ import json
 from typing import Iterator, Tuple, Any
 
 from .base import Pipe, Event
+from ..implied import implied
 
 
 class CastReader(Pipe):
@@ -38,8 +39,10 @@ class CastReader(Pipe):
 
             self.debug("header", f"{width}x{height}")
 
-            # Emit resize event
-            yield 0.0, Event("resize", width=width, height=height)
+            # Only emit resize event if current dimensions are implied (auto-detected)
+            # This allows .cast files to override terminal dimensions but respects explicit --width
+            if implied(self.width):
+                yield 0.0, Event("resize", width=width, height=height)
 
             # Process data lines
             entry_count = 0
