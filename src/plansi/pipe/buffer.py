@@ -63,8 +63,7 @@ class AnsiBuffer(Pipe):
         # First frame: parse into prev_terminal and output directly
         if self.first_frame:
             self.first_frame = False
-            # Parse into prev_terminal only
-            self.prev_terminal.set_cursor(0, 0)
+            # Parse into prev_terminal only - no cursor reset, let ANSI control cursor
             self.prev_terminal.parser.feed(ansi_input)
 
             # Output first frame directly
@@ -72,8 +71,7 @@ class AnsiBuffer(Pipe):
             self.frame_count += 1
             return
 
-        # Parse current frame into curr_terminal
-        self.curr_terminal.set_cursor(0, 0)
+        # Parse current frame into curr_terminal - no cursor reset, accumulate naturally
         self.curr_terminal.parser.feed(ansi_input)
 
         # Generate differential output by comparing terminals

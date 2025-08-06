@@ -131,6 +131,15 @@ def test_explicit_realtime_overrides_tty_detection():
         assert not args.realtime and not implied(args.realtime)  # User explicitly disabled it
 
 
+def test_explicit_stdout_output():
+    """Test explicit stdout output (plansi input -)."""
+    args = parse_args(["input.mp4", "-"])
+
+    assert args.input == "input.mp4"
+    assert args.output == "-" and not implied(args.output)  # Explicitly set to stdout
+    assert args.stdout and not implied(args.stdout)  # Should be True because output is '-'
+
+
 def test_complex_argument_interaction():
     """Test complex interaction of multiple arguments."""
     args = parse_args(["video.mp4", "output.cast", "--threshold", "2.0", "--input-format", "cast"])

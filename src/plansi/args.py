@@ -136,7 +136,11 @@ def _set_input_format(args):
 def _set_output_flags(args):
     """Set output-related flags."""
     # Set stdout flag based on output destination
-    args.stdout = Implied(True) if args.output == "-" and implied(args.output) else False
+    if args.output == "-":
+        # stdout follows the same implied/explicit status as output
+        args.stdout = Implied(True, None if implied(args.output) else True)
+    else:
+        args.stdout = False
 
 
 def _set_debug(args):
@@ -158,3 +162,7 @@ def _set_perceptual(args):
     # Auto-detect based on input format
     text_format = args.input_format in ("cast", "ansi")
     args.perceptual = Implied(not text_format, args.perceptual)
+
+    # When perceptual is disabled, set threshold to 0 (exact matching)
+    if args.perceptual == False:  # noqa: E712
+        args.threshold = Implied(0.0, args.threshold)

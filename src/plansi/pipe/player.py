@@ -5,7 +5,7 @@ import time
 from typing import Iterator, Tuple, Any
 
 from .base import Pipe
-from ..control_codes import SETUP_TERMINAL, RESTORE_TERMINAL, HOME_CURSOR, CLEAR_TO_EOL
+from ..control_codes import SETUP_TERMINAL, RESTORE_TERMINAL, CLEAR_TO_EOL
 
 
 class TerminalPlayer(Pipe):
@@ -61,8 +61,8 @@ class TerminalPlayer(Pipe):
                     self.debug("skipped", self.skipped_frames)
                     self.skipped_frames = 0
 
-        # Move cursor to home and output ANSI
-        sys.stdout.write(HOME_CURSOR + data)
+        # Output ANSI data directly - let ANSI sequences control cursor positioning
+        sys.stdout.write(data)
 
         # Debug info - display all pipeline debug messages
         if self.args.debug:

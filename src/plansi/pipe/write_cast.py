@@ -22,16 +22,14 @@ class CastWriter(Pipe):
         """Convert ANSI to cast format JSON."""
         ansi_string = data
 
-        # Skip empty output
-        if not ansi_string or not ansi_string.strip():
-            return
+        # Process all data - don't skip empty lines or whitespace
 
         # Write header on first actual data (not on events)
         if not self.header_written:
             header = {
                 "version": 2,
-                "width": self.width,
-                "height": self.height,
+                "width": int(self.width),  # Convert Implied to int
+                "height": int(self.height),  # Convert Implied to int
                 "timestamp": int(time.time()),
                 "title": getattr(self.args, "title", "plansi recording"),
             }

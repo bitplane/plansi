@@ -19,7 +19,7 @@ class AnsiReader(Pipe):
         self.start_time = time.time()
 
     def process(self, timestamp: float, data: Any) -> Iterator[Tuple[float, str]]:
-        """Read ANSI data and yield it."""
+        """Read ANSI data line by line."""
         filepath = data
 
         # Handle stdin vs file input
@@ -31,15 +31,15 @@ class AnsiReader(Pipe):
             input_stream = open(filepath, "r", encoding="utf-8")
 
         try:
-            # Read all content at once for now
-            content = input_stream.read()
-            if content:
+            line_count = 0
+            for line in input_stream:
                 # Use elapsed time since setup
                 elapsed_time = time.time() - self.start_time
-                yield elapsed_time, content
+                yield elapsed_time, line
+                line_count += 1
         finally:
             # Close file if we opened it (but not stdin)
             if filepath != "-":
                 input_stream.close()
 
-        self.debug("content", f"{len(content) if content else 0} bytes")
+        self.debug("lines", str(line_count))
