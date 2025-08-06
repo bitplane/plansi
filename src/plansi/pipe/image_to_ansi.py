@@ -16,8 +16,8 @@ class ImageToAnsi(Pipe):
 
     def setup(self):
         """Initialize Chafa canvas."""
-        # Get dimensions from args
-        self.width = getattr(self.args, "width", 80)
+        # Get dimensions from args - width is already set by base Pipe class
+        # which gets it from args or defaults to 80
 
         # Will calculate height on first frame to maintain aspect ratio
         self.canvas = None

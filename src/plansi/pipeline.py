@@ -41,7 +41,7 @@ def build_pipeline(args):
             cast = CastWriter(pipeline, args)
             pipeline = FileWriter(cast, args)
         else:
-            # Direct copy of cast file
+            # Direct copy of cast file - no title needed
             pipeline = FileWriter(pipeline, args)
         return pipeline, True
     else:

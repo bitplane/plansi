@@ -14,12 +14,10 @@ class FileWriter(Pipe):
 
     def setup(self):
         """Open output file."""
-        filepath = getattr(self.args, "output", None)
-        if not filepath:
+        if not self.args.output:
             raise ValueError("FileWriter requires output file path in args.output")
 
-        mode = getattr(self.args, "mode", "w")
-        self.file = open(filepath, mode)
+        self.file = open(self.args.output, "w")
         self.line_count = 0
 
     def teardown(self):
