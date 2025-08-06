@@ -3,7 +3,7 @@
 import json
 from typing import Iterator, Tuple, Any
 
-from .base import Pipe
+from .base import Pipe, Event
 
 
 class CastReader(Pipe):
@@ -32,12 +32,14 @@ class CastReader(Pipe):
             if header.get("version") != 2:
                 raise ValueError(f"Unsupported cast version: {header.get('version')}")
 
-            # Store dimensions in args for downstream pipes
-            if hasattr(self.args, "__dict__"):
-                self.args.width = header.get("width", 80)
-                self.args.height = header.get("height", 24)
+            # Get dimensions from header
+            width = header.get("width", 80)
+            height = header.get("height", 24)
 
-            self.debug(f"Cast file: {header.get('width', 80)}x{header.get('height', 24)}")
+            self.debug("header", f"{width}x{height}")
+
+            # Emit resize event
+            yield 0.0, Event("resize", width=width, height=height)
 
             # Process data lines
             entry_count = 0
@@ -62,4 +64,4 @@ class CastReader(Pipe):
                     entry_count += 1
                     yield float(entry_time), ansi_data
 
-            self.debug(f"Cast read complete: {entry_count} entries")
+            self.debug("entries", str(entry_count))

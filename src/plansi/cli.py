@@ -77,6 +77,10 @@ def main():
             video = VideoReader(input_list, args)
             pipeline = ImageToAnsi(video, args)
 
+        # Apply differential rendering unless disabled
+        if not args.no_diff:
+            pipeline = AnsiBuffer(pipeline, args)
+
         if args.output:
             # Output to .cast file
             if not is_cast_input:
@@ -94,19 +98,7 @@ def main():
 
             print(f"Wrote cast file: {args.output}", file=sys.stderr)
         else:
-            # Apply differential rendering unless disabled (only for terminal output)
-            if not args.no_diff and not is_cast_input:
-                # For video, use calculated dimensions
-                args.height = int(args.width * 9 / 16 * 0.5)  # Assume 16:9 for now
-                pipeline = AnsiBuffer(pipeline, args)
-
             # Play to terminal
-            # For cast files, dimensions should already be set by CastReader
-            # For video files, dimensions should be set by ImageToAnsi
-            if not hasattr(args, "height"):
-                args.height = int(args.width * 9 / 16 * 0.5)  # Fallback estimate
-
-            # Create terminal player
             args.realtime = True
             player = TerminalPlayer(pipeline, args)
 

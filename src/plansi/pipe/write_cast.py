@@ -20,22 +20,29 @@ class CastWriter(Pipe):
 
     def process(self, timestamp: float, data: Any) -> Iterator[Tuple[float, str]]:
         """Convert ANSI to cast format JSON."""
-        # Write header on first frame
+        ansi_string = data
+
+        # Skip empty output
+        if not ansi_string or not ansi_string.strip():
+            return
+
+        # Write header on first actual data (not on events)
         if not self.header_written:
             header = {
                 "version": 2,
-                "width": getattr(self.args, "width", 80),
-                "height": getattr(self.args, "height", 24),
+                "width": self.width,
+                "height": self.height,
                 "timestamp": int(time.time()),
                 "title": getattr(self.args, "title", "plansi recording"),
             }
             yield 0.0, json.dumps(header)
             self.header_written = True
-            self.debug("header", f"{header['width']}x{header['height']}")
+            self.debug("header", f"{self.width}x{self.height}")
 
-        # Skip empty output
-        ansi_string = data
-        if ansi_string and ansi_string.strip():
-            # Create cast entry: [timestamp, "o", data]
-            cast_entry = [float(f"{timestamp:.4f}"), "o", ansi_string]
-            yield timestamp, json.dumps(cast_entry)
+        # Convert \n to \r\n for asciinema compatibility (since it doesn't support LNM mode)
+        ansi_string = ansi_string.replace("\n", "\r\n")
+        # Create cast entry: [timestamp, "o", data]
+        cast_entry = [float(f"{timestamp:.4f}"), "o", ansi_string]
+        yield timestamp, json.dumps(cast_entry)
+
+    # The base class on_resize handles updating self.width/height

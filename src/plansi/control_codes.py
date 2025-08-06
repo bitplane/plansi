@@ -20,6 +20,9 @@ RESTORE_TERMINAL = "\x1b[0m" + SHOW_CURSOR  # Reset + show cursor
 # Cursor movement (use .format(row+1, col+1) for 1-based positioning)
 MOVE_CURSOR = "\x1b[{};{}H"
 
+# Terminal resize (use .format(height, width) for terminal dimensions)
+RESIZE_TERMINAL = "\x1b[8;{};{}t"
+
 # Color control
 SET_FOREGROUND_RGB = "\x1b[38;2;{};{};{}m"  # Use .format(r, g, b)
 SET_BACKGROUND_RGB = "\x1b[48;2;{};{};{}m"  # Use .format(r, g, b)

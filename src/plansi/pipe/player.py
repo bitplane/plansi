@@ -29,7 +29,7 @@ class TerminalPlayer(Pipe):
         """Restore terminal."""
 
         # Restore terminal and position cursor below content
-        sys.stdout.write(f"{RESTORE_TERMINAL}\x1b[{self.args.height + 1};1H")
+        sys.stdout.write(f"{RESTORE_TERMINAL}\x1b[{self.height + 1};1H")
         sys.stdout.flush()
 
     def process(self, timestamp: float, data: Any) -> Iterator[Tuple[float, Any]]:
@@ -73,7 +73,7 @@ class TerminalPlayer(Pipe):
                 lines = all_msgs.split("\n")
                 debug_output = "\x1b[0m"
                 for i, line in enumerate(lines):
-                    debug_output += f"\x1b[{self.args.height + 1 + i};1H{line}{CLEAR_TO_EOL}\n"
+                    debug_output += f"\x1b[{self.height + 1 + i};1H{line}{CLEAR_TO_EOL}\n"
                 sys.stdout.write(debug_output)
 
         sys.stdout.flush()

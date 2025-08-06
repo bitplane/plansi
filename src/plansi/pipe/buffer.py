@@ -30,13 +30,13 @@ class AnsiBuffer(Pipe):
     def setup(self):
         """Initialize two separate terminals."""
         # Previous frame terminal
-        self.prev_terminal = Terminal(width=self.args.width, height=self.args.height)
+        self.prev_terminal = Terminal(width=self.width, height=self.height)
         self.prev_terminal.cursor_visible = False
         self.prev_terminal.parser.feed(DISABLE_LINE_WRAP)
         self.prev_terminal.parser.feed(ENABLE_LNM)
 
         # Current frame terminal
-        self.curr_terminal = Terminal(width=self.args.width, height=self.args.height)
+        self.curr_terminal = Terminal(width=self.width, height=self.height)
         self.curr_terminal.cursor_visible = False
         self.curr_terminal.parser.feed(DISABLE_LINE_WRAP)
         self.curr_terminal.parser.feed(ENABLE_LNM)
@@ -87,8 +87,8 @@ class AnsiBuffer(Pipe):
         cells_changed = 0
         cells_total = 0
 
-        for row in range(self.args.height):
-            for col in range(self.args.width):
+        for row in range(self.height):
+            for col in range(self.width):
                 cells_total += 1
 
                 # Get cells from both terminals
@@ -118,7 +118,7 @@ class AnsiBuffer(Pipe):
 
                     # Update cursor position after character
                     self.current_cursor_x = col + 1
-                    if self.current_cursor_x >= self.args.width:
+                    if self.current_cursor_x >= self.width:
                         self.current_cursor_x = 0
                         self.current_cursor_y += 1
 
@@ -193,3 +193,12 @@ class AnsiBuffer(Pipe):
         self.terminal.clear_screen()
 
         # Now the primary buffer should have empty cells with default style
+
+    def on_resize(self, timestamp: float, width: int, height: int) -> Iterator[Tuple[float, Any]]:
+        """Handle resize event - resize terminals first, then propagate."""
+        # Resize our terminals first (before updating self.width/height)
+        if width != self.width or height != self.height:
+            self.prev_terminal.resize(width, height)
+            self.curr_terminal.resize(width, height)
+        # Now call parent to update self.width/height and propagate
+        yield from super().on_resize(timestamp, width, height)

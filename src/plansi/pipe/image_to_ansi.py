@@ -3,7 +3,8 @@
 from typing import Iterator, Tuple, Any
 from chafa import PixelMode, DitherMode, PixelType, Canvas, ColorSpace, CanvasConfig, CanvasMode
 
-from .base import Pipe
+from .base import Pipe, Event
+from ..control_codes import HIDE_CURSOR, HOME_CURSOR, SHOW_CURSOR
 
 
 class ImageToAnsi(Pipe):
@@ -21,6 +22,7 @@ class ImageToAnsi(Pipe):
         # Will calculate height on first frame to maintain aspect ratio
         self.canvas = None
         self.height = None
+        self.frame_count = 0
 
     def teardown(self):
         """Clean up canvas."""
@@ -37,10 +39,6 @@ class ImageToAnsi(Pipe):
             img_width, img_height = img.size
             aspect_ratio = img_height / img_width
             self.height = int(self.width * aspect_ratio * 0.5)
-
-            # Update args with calculated height
-            if hasattr(self.args, "__dict__"):
-                self.args.height = self.height
 
             # Configure Chafa
             config = CanvasConfig()
@@ -59,6 +57,9 @@ class ImageToAnsi(Pipe):
 
             self.debug("canvas", f"{self.width}x{self.height}")
 
+            # Emit resize event on first frame
+            yield timestamp, Event("resize", width=self.width, height=self.height)
+
         # Render image to ANSI
         width, height = img.size
         pixel_data = img.tobytes()
@@ -75,4 +76,9 @@ class ImageToAnsi(Pipe):
         # Get ANSI output
         ansi_output = self.canvas.print().decode("utf-8")
 
-        yield timestamp, ansi_output
+        # Add cursor control for full frame output
+        full_output = HIDE_CURSOR + HOME_CURSOR + ansi_output + SHOW_CURSOR
+
+        self.frame_count += 1
+
+        yield timestamp, full_output
