@@ -1,7 +1,6 @@
 # 👾 plansi
 
-Plays videos as ANSI, trying to keep the output as small and as castable
-as possible.
+pipeline for text; a video player, cast quantizer, saver of scrollbacks
 
 ## ▶ Usage
 

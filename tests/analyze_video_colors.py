@@ -1,7 +1,7 @@
 """Analyze colors from the top row of the video output."""
 
 import re
-from plansi.core.terminal_render import TerminalRenderer
+from plansi import perceptual
 
 
 def extract_rgb_from_ansi(ansi_text):
@@ -39,8 +39,6 @@ def analyze_video_colors():
     print(f"Found {len(fg_colors)} foreground colors and {len(bg_colors)} background colors")
     print()
 
-    renderer = TerminalRenderer(width=80, height=24)
-
     print("Foreground Colors:")
     for i, color in enumerate(fg_colors[:10]):  # First 10 colors
         print(f"  FG{i:2d}: {color}")
@@ -55,14 +53,14 @@ def analyze_video_colors():
     print("Adjacent FG color differences:")
     for i in range(min(len(fg_colors) - 1, 9)):
         color1, color2 = fg_colors[i], fg_colors[i + 1]
-        diff = renderer._color_distance(color1, color2)
+        diff = perceptual.color_distance(color1, color2)
         perceptual_diff = min(diff / 200.0, 1.0) * 100.0
         print(f"  FG{i:2d} {color1} -> FG{i+1:2d} {color2}: LAB ΔE={diff:6.2f}, Perceptual={perceptual_diff:5.2f}%")
 
     print("\nAdjacent BG color differences:")
     for i in range(min(len(bg_colors) - 1, 9)):
         color1, color2 = bg_colors[i], bg_colors[i + 1]
-        diff = renderer._color_distance(color1, color2)
+        diff = perceptual.color_distance(color1, color2)
         perceptual_diff = min(diff / 200.0, 1.0) * 100.0
         print(f"  BG{i:2d} {color1} -> BG{i+1:2d} {color2}: LAB ΔE={diff:6.2f}, Perceptual={perceptual_diff:5.2f}%")
 
@@ -73,7 +71,7 @@ def analyze_video_colors():
     trigger_count = 0
     for i in range(min(len(fg_colors) - 1, 9)):
         color1, color2 = fg_colors[i], fg_colors[i + 1]
-        diff = renderer._color_distance(color1, color2)
+        diff = perceptual.color_distance(color1, color2)
         perceptual_diff = min(diff / 200.0, 1.0) * 100.0
         if perceptual_diff > 5.0:
             print(f"  ✓ FG{i} -> FG{i+1}: {perceptual_diff:.2f}%")
@@ -81,7 +79,7 @@ def analyze_video_colors():
 
     for i in range(min(len(bg_colors) - 1, 9)):
         color1, color2 = bg_colors[i], bg_colors[i + 1]
-        diff = renderer._color_distance(color1, color2)
+        diff = perceptual.color_distance(color1, color2)
         perceptual_diff = min(diff / 200.0, 1.0) * 100.0
         if perceptual_diff > 5.0:
             print(f"  ✓ BG{i} -> BG{i+1}: {perceptual_diff:.2f}%")

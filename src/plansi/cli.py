@@ -5,9 +5,9 @@ import argparse
 import atexit
 import os
 import sys
-from .player import Player
 from . import __version__
 from .control_codes import SHOW_CURSOR, RESTORE_TERMINAL
+from .pipe import VideoSplitter, ImageToAnsi, AnsiToCast, CastToAnsi, FileSink, TerminalPlayer
 
 
 def restore_cursor():
@@ -20,10 +20,11 @@ def main():
     # Register cursor restoration for any exit scenario
     atexit.register(restore_cursor)
 
-    parser = argparse.ArgumentParser(description="Play videos as differential ANSI in terminal")
+    parser = argparse.ArgumentParser(description="Play videos as ANSI in terminal")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    parser.add_argument("video", help="Path to video file")
+    parser.add_argument("input", help="Path to video or .cast file")
     parser.add_argument("output", nargs="?", help="Optional output .cast file (if not provided, plays to console)")
+
     # Auto-detect terminal width
     try:
         default_width = os.get_terminal_size().columns
@@ -38,54 +39,84 @@ def main():
         help=f"Terminal width in characters (default: auto-detected {default_width})",
     )
     parser.add_argument("--fps", "-f", type=float, default=None, help="Target FPS (default: original video rate)")
-    parser.add_argument(
-        "--threshold",
-        "-t",
-        type=float,
-        default=5.0,
-        help="Perceptual color difference threshold for cell changes (default: 5.0)",
-    )
-    parser.add_argument("--no-diff", action="store_true", help="Disable differential rendering, output full frames")
-    parser.add_argument("--debug", action="store_true", help="Show debug information about cell comparisons")
-    parser.add_argument(
-        "--cache-position", action="store_true", help="Enable cursor position caching optimization (experimental)"
-    )
-    parser.add_argument(
-        "--no-cache-style", action="store_false", dest="cache_style", help="Disable style caching optimization"
-    )
+    parser.add_argument("--debug", action="store_true", help="Show debug information")
 
     args = parser.parse_args()
 
     try:
-        if args.output:
-            # Write to .cast file - use non-realtime to process every frame
-            cast_player = Player(
-                width=args.width,
-                color_threshold=args.threshold,
-                fps=args.fps,
-                no_diff=args.no_diff,
-                debug=args.debug,
-                realtime=False,  # Process every frame for complete recording
-                cache_position=args.cache_position,
-                cache_style=args.cache_style,
-            )
-            write_cast_file(cast_player, args.video, args.output)
+        # Determine input type
+        is_cast_input = args.input.endswith(".cast")
+
+        if is_cast_input:
+            # Cast file input - play or convert
+            # Start with a single input tuple
+            source = iter([(0.0, args.input)])
+            pipeline = CastToAnsi(source)
+
+            # Store dimensions for output
+            width = None
+            height = None
         else:
-            # Play to console - use realtime to skip frames as needed
-            console_player = Player(
-                width=args.width,
-                color_threshold=args.threshold,
-                fps=args.fps,
-                no_diff=args.no_diff,
-                debug=args.debug,
-                realtime=True,  # Skip frames to maintain timing
-                cache_position=args.cache_position,
-                cache_style=args.cache_style,
-            )
-            play_to_console(console_player, args.video)
+            # Video file input - convert to ANSI
+            # Start with a single input tuple
+            source = iter([(0.0, args.input)])
+
+            # Build video processing pipeline
+            video = VideoSplitter(source, fps=args.fps)
+            pipeline = ImageToAnsi(video, width=args.width)
+
+            # Calculate height for terminal output
+            # Will be set by ImageToAnsi on first frame
+            width = args.width
+            height = None
+
+        if args.output:
+            # Output to .cast file
+            if not is_cast_input:
+                # Need to convert ANSI to cast format
+                cast = AnsiToCast(pipeline, width=width, title=f"plansi - {os.path.basename(args.input)}")
+                sink = FileSink(cast, filepath=args.output)
+            else:
+                # Direct copy of cast file
+                sink = FileSink(pipeline, filepath=args.output)
+
+            # Process pipeline
+            for _ in sink:
+                pass  # FileSink handles writing
+
+            print(f"Wrote cast file: {args.output}", file=sys.stderr)
+        else:
+            # Play to terminal
+            # Get dimensions from first frame if needed
+            if is_cast_input:
+                # Peek at first frame to get dimensions from cast file
+                # This is a bit hacky but works for now
+                peek_source = iter([(0.0, args.input)])
+                peek_pipe = CastToAnsi(peek_source)
+                with peek_pipe:
+                    # CastToAnsi stores dimensions in args after reading header
+                    for _ in peek_pipe:
+                        break  # Just need to trigger header read
+                    width = peek_pipe.args.get("width", 80)
+                    height = peek_pipe.args.get("height", 24)
+
+                # Create fresh pipeline for actual playback
+                source = iter([(0.0, args.input)])
+                pipeline = CastToAnsi(source)
+            else:
+                # For video, height will be calculated by ImageToAnsi
+                # Use a reasonable default for now
+                height = int(args.width * 9 / 16 * 0.5)  # Assume 16:9 aspect ratio
+
+            # Create terminal player
+            player = TerminalPlayer(pipeline, realtime=True, debug=args.debug, width=width, height=height)
+
+            # Play pipeline
+            for _ in player:
+                pass  # TerminalPlayer handles output
 
     except KeyboardInterrupt:
-        # Clean exit on Ctrl+C - restore cursor and reset terminal
+        # Clean exit on Ctrl+C
         print(RESTORE_TERMINAL, flush=True)
         sys.exit(0)
     except Exception as e:
@@ -93,20 +124,3 @@ def main():
         print(RESTORE_TERMINAL, flush=True)
         print(f"\nError: {e}", file=sys.stderr)
         sys.exit(1)
-
-
-def play_to_console(player: Player, video_path: str):
-    """Play video to console (timing handled by Player.play() with realtime flag)."""
-    for timestamp, ansi_output in player.frames(video_path):
-        # Output ANSI to terminal (no sleep needed - timing handled in Player.play())
-        sys.stdout.write(ansi_output)
-        sys.stdout.flush()
-
-
-def write_cast_file(player: Player, video_path: str, output_path: str):
-    """Write video to .cast file format."""
-    with open(output_path, "w") as cast_file:
-        for cast_line in player.cast_entries(video_path):
-            cast_file.write(cast_line + "\n")
-
-        print(f"Wrote cast file: {output_path}", file=sys.stderr)

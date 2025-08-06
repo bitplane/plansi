@@ -1,11 +1,10 @@
 """Test LAB Delta E ranges for known color pairs to understand scaling."""
 
-from plansi.core.terminal_render import TerminalRenderer
+from plansi import perceptual
 
 
 def test_lab_delta_e_ranges():
     """Test LAB Delta E values for known color pairs."""
-    renderer = TerminalRenderer(width=80, height=24)
 
     # Test color pairs with expected perceptual differences
     test_pairs = [
@@ -26,7 +25,7 @@ def test_lab_delta_e_ranges():
     print("-" * 80)
 
     for color1, color2, desc in test_pairs:
-        delta_e = renderer._color_distance(color1, color2)
+        delta_e = perceptual.color_distance(color1, color2)
         print(f"{str(color1):20} {str(color2):20} {delta_e:8.2f}  {desc}")
 
     print()
@@ -44,7 +43,7 @@ def test_lab_delta_e_ranges():
     print("RGB Color           LAB Color                   Description")
     print("-" * 70)
     for rgb, desc in key_colors:
-        lab = renderer._rgb_to_lab(rgb)
+        lab = perceptual.rgb_to_lab(rgb)
         print(f"{str(rgb):20} {lab[0]:6.1f} {lab[1]:6.1f} {lab[2]:6.1f}        {desc}")
 
 
