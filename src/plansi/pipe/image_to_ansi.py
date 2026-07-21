@@ -28,6 +28,16 @@ class ImageToAnsi(Pipe):
         """Clean up canvas."""
         self.canvas = None
 
+    def on_resize(self, timestamp: float, width: int, height: int) -> Iterator[Tuple[float, Any]]:
+        """Rebuild the canvas at the new width; height re-derives from aspect.
+
+        The incoming event is swallowed: the canvas init on the next frame
+        emits a fresh resize with the aspect-corrected height instead.
+        """
+        self.width = width
+        self.canvas = None
+        yield from ()
+
     def process(self, timestamp: float, data: Any) -> Iterator[Tuple[float, str]]:
         """Convert image to ANSI."""
         img = data

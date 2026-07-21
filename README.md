@@ -16,7 +16,7 @@ uvx plansi video.mp4 --fps=15 --threshold=10 --debug
 uvx plansi video.mp4 --cache-position --no-cache-style
 ```
 
-## TODO - Version 0.1.0
+## TODO
 
 ### 🗑️ refactor
 
@@ -31,6 +31,3 @@ uvx plansi video.mp4 --cache-position --no-cache-style
   - [ ] Linux: `/dev/video0` with v4l2
   - [ ] Windows: DirectShow device enumeration
   - [ ] macOS: AVFoundation device support
-
-### 📺 Terminal & Display
-- [ ] **SIGWINCH handling**: Resize video on terminal window resize during live playback

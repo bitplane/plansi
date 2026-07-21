@@ -9,6 +9,7 @@ from .write_file import FileWriter
 from .image_to_ansi import ImageToAnsi
 from .player import TerminalPlayer
 from .buffer import AnsiBuffer
+from .winch import ResizeWatcher
 
 __all__ = [
     "Pipe",
@@ -20,4 +21,5 @@ __all__ = [
     "ImageToAnsi",
     "TerminalPlayer",
     "AnsiBuffer",
+    "ResizeWatcher",
 ]

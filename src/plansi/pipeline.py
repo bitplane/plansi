@@ -1,7 +1,19 @@
 """Pipeline building for plansi."""
 
 import os
-from .pipe import VideoReader, ImageToAnsi, CastWriter, CastReader, AnsiReader, AnsiBuffer, FileWriter, TerminalPlayer
+import signal
+
+from .pipe import (
+    VideoReader,
+    ImageToAnsi,
+    CastWriter,
+    CastReader,
+    AnsiReader,
+    AnsiBuffer,
+    FileWriter,
+    TerminalPlayer,
+    ResizeWatcher,
+)
 
 
 def get_input(args):
@@ -24,8 +36,11 @@ def get_input(args):
         # ANSI data input (usually stdin)
         return AnsiReader(input_list, args)
     else:
-        # Video file input - convert to ANSI
+        # Video file input - convert to ANSI, following the terminal's size
+        # when we're playing live (SIGWINCH doesn't exist on Windows)
         video = VideoReader(input_list, args)
+        if args.stdout and hasattr(signal, "SIGWINCH"):
+            video = ResizeWatcher(video, args)
         return ImageToAnsi(video, args)
 
 
