@@ -80,9 +80,13 @@ class AnsiBuffer(Pipe):
         viewer_page = self.viewer_board.blitter.primary_buffer
 
         for row in range(self.height):
-            for col in range(self.width):
-                cells_total += 1
+            cells_total += self.width
 
+            # Fast path: identical rows need no perceptual math at all
+            if truth_page.grid[row] == viewer_page.grid[row]:
+                continue
+
+            for col in range(self.width):
                 viewer_cell = viewer_page.get_cell(col, row)
                 truth_cell = truth_page.get_cell(col, row)
 

@@ -19,7 +19,7 @@ class TerminalPlayer(Pipe):
         """Setup terminal and timing."""
         self.start_time = None
         self.frame_count = 0
-        self.skipped_frames = 0
+        self.late_frames = 0
 
         # Setup terminal
         sys.stdout.write(SETUP_TERMINAL)
@@ -38,28 +38,18 @@ class TerminalPlayer(Pipe):
         if self.start_time is None:
             self.start_time = time.time()
             # Always display first frame immediately, regardless of timing
-            # Don't apply realtime logic to first frame
 
         elif self.args.realtime:
-            # Calculate when this frame should appear
-            current_time = time.time() - self.start_time
-
-            if current_time > timestamp:
-                # We're behind - skip this frame
-                self.skipped_frames += 1
-                self.frame_count += 1
-                yield timestamp, data
-                return
+            # A differential stream can't drop frames - every diff assumes the
+            # previous one landed. When we're behind, we drop the sleep instead
+            # and the video runs at whatever speed the pipeline manages.
+            sleep_time = timestamp - (time.time() - self.start_time)
+            if sleep_time > 0:
+                time.sleep(sleep_time)
             else:
-                # Wait until it's time
-                sleep_time = timestamp - current_time
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
-
-                # Report skipped frames when we catch up
-                if self.skipped_frames > 0 and self.args.debug:
-                    self.debug("skipped", self.skipped_frames)
-                    self.skipped_frames = 0
+                self.late_frames += 1
+                if self.args.debug:
+                    self.debug("late", self.late_frames)
 
         # Output ANSI data directly - let ANSI sequences control cursor positioning
         sys.stdout.write(data)
