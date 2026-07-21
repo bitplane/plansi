@@ -12,8 +12,7 @@ dependencies = [
     "bittty>=0.1.1,<0.2",
     "chafa.py~=1.2",
     "av~=15.0",
-    "Pillow~=11.3",
-    "yt-dlp>=2025.7"
+    "Pillow~=11.3"
 ]
 
 [project.scripts]
