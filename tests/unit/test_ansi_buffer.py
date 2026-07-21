@@ -63,6 +63,17 @@ def test_colour_change_above_threshold_is_emitted():
     assert "\x1b[38;2;255;0;0m" in diff
 
 
+def test_indexed_colour_frames_diff_through_the_palette():
+    """SGR 31/34 frames used to crash colour extraction; now they resolve via the palette."""
+    frames = [
+        (0.0, "\x1b[1;1H\x1b[31mxx        "),
+        (1.0, "\x1b[1;1H\x1b[34mxx        "),
+    ]
+    output, _ = run_pipe(frames)
+    _, diff = output[1]
+    assert "x" in diff  # red -> blue is far beyond any threshold
+
+
 def test_boards_track_resize_events():
     _, pipe = run_pipe([(0.0, "hi")])
     events = list(pipe.on_resize(1.0, 20, 5))

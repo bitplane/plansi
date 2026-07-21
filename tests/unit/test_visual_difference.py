@@ -1,167 +1,104 @@
-"""Tests for visual difference algorithm with known color values and styles."""
+"""Visual difference algorithm with real bittty styles resolved through a real palette."""
 
-from unittest.mock import Mock
+import pytest
+
+from bittty import Board
+from bittty.style import Style, Color
+
 from plansi import perceptual
 
 
-def create_mock_style(fg_rgb=None, bg_rgb=None, reverse=False):
-    """Create a mock bittty Style object."""
-    style = Mock()
-    style.reverse = reverse
-
-    # Mock fg color
-    if fg_rgb:
-        style.fg = Mock()
-        style.fg.value = fg_rgb
-    else:
-        style.fg = None
-
-    # Mock bg color
-    if bg_rgb:
-        style.bg = Mock()
-        style.bg.value = bg_rgb
-    else:
-        style.bg = None
-
-    return style
+@pytest.fixture
+def palette():
+    return Board(width=2, height=2).palette
 
 
-def test_identical_cells_return_zero():
-    """Identical cells should return 0.0 difference."""
-    # Same character, same colors
-    style1 = create_mock_style(fg_rgb=(255, 255, 255), bg_rgb=(0, 0, 0))
-    style2 = create_mock_style(fg_rgb=(255, 255, 255), bg_rgb=(0, 0, 0))
-
-    cell1 = (style1, "A")
-    cell2 = (style2, "A")
-
-    diff = perceptual.visual_difference(cell1, cell2)
-    assert diff == 0.0, f"Identical cells should return 0.0, got {diff}"
+def rgb_style(fg=None, bg=None, reverse=None):
+    return Style(
+        fg=Color("rgb", fg) if fg else None,
+        bg=Color("rgb", bg) if bg else None,
+        reverse=reverse,
+    )
 
 
-def test_different_characters_same_colors():
-    """Different characters with same colors should give NO difference (color-only algorithm)."""
-    style1 = create_mock_style(fg_rgb=(255, 255, 255), bg_rgb=(0, 0, 0))
-    style2 = create_mock_style(fg_rgb=(255, 255, 255), bg_rgb=(0, 0, 0))
-
-    cell1 = (style1, "A")
-    cell2 = (style2, "B")
-
-    diff = perceptual.visual_difference(cell1, cell2)
-    assert diff == 0.0, f"Same colors should give 0 difference regardless of character, got {diff}"
-    print(f"Different chars, same colors: {diff}")
+def test_identical_cells_return_zero(palette):
+    style = rgb_style(fg=(255, 255, 255), bg=(0, 0, 0))
+    diff = perceptual.visual_difference((style, "A"), (style, "A"), palette)
+    assert diff == 0.0
 
 
-def test_same_character_different_colors():
-    """Same character with different colors should give some difference."""
-    style1 = create_mock_style(fg_rgb=(255, 255, 255), bg_rgb=(0, 0, 0))
-    style2 = create_mock_style(fg_rgb=(255, 0, 0), bg_rgb=(0, 0, 0))  # Red fg
-
-    cell1 = (style1, "A")
-    cell2 = (style2, "A")
-
-    diff = perceptual.visual_difference(cell1, cell2)
-    assert diff > 0.0, f"Different colors should give difference > 0, got {diff}"
-    print(f"Same char, different colors: {diff}")
+def test_different_characters_same_colors(palette):
+    """The algorithm is colour-only: character changes are the caller's problem."""
+    style1 = rgb_style(fg=(255, 255, 255), bg=(0, 0, 0))
+    style2 = rgb_style(fg=(255, 255, 255), bg=(0, 0, 0))
+    diff = perceptual.visual_difference((style1, "A"), (style2, "B"), palette)
+    assert diff == 0.0
 
 
-def test_high_contrast_vs_low_contrast_colors():
-    """Different high contrast colors vs different low contrast colors."""
-    # High contrast colors: white vs black
-    white_style = create_mock_style(fg_rgb=(255, 255, 255), bg_rgb=(0, 0, 0))
-    black_style = create_mock_style(fg_rgb=(0, 0, 0), bg_rgb=(0, 0, 0))
-
-    # Low contrast colors: light gray vs dark gray
-    light_gray_style = create_mock_style(fg_rgb=(180, 180, 180), bg_rgb=(0, 0, 0))
-    dark_gray_style = create_mock_style(fg_rgb=(120, 120, 120), bg_rgb=(0, 0, 0))
-
-    high_cell1 = (white_style, "A")
-    high_cell2 = (black_style, "A")
-
-    low_cell1 = (light_gray_style, "A")
-    low_cell2 = (dark_gray_style, "A")
-
-    high_diff = perceptual.visual_difference(high_cell1, high_cell2)
-    low_diff = perceptual.visual_difference(low_cell1, low_cell2)
-
-    print(f"High contrast color diff: {high_diff}")
-    print(f"Low contrast color diff: {low_diff}")
-
-    assert high_diff > low_diff, f"High contrast colors should be more different: {high_diff} vs {low_diff}"
+def test_same_character_different_colors(palette):
+    style1 = rgb_style(fg=(255, 255, 255), bg=(0, 0, 0))
+    style2 = rgb_style(fg=(255, 0, 0), bg=(0, 0, 0))
+    diff = perceptual.visual_difference((style1, "A"), (style2, "A"), palette)
+    assert diff > 0.0
 
 
-def test_inverse_video_handling():
-    """Inverse video should be handled by flipping fg/bg."""
-    # Normal: white fg, black bg
-    normal_style = create_mock_style(fg_rgb=(255, 255, 255), bg_rgb=(0, 0, 0), reverse=False)
+def test_high_contrast_beats_low_contrast(palette):
+    white = rgb_style(fg=(255, 255, 255), bg=(0, 0, 0))
+    black = rgb_style(fg=(0, 0, 0), bg=(0, 0, 0))
+    light_gray = rgb_style(fg=(180, 180, 180), bg=(0, 0, 0))
+    dark_gray = rgb_style(fg=(120, 120, 120), bg=(0, 0, 0))
 
-    # Inverse: black fg, white bg, but with reverse=True (so effectively white fg, black bg)
-    inverse_style = create_mock_style(fg_rgb=(0, 0, 0), bg_rgb=(255, 255, 255), reverse=True)
-
-    cell1 = (normal_style, "A")
-    cell2 = (inverse_style, "A")
-
-    diff = perceptual.visual_difference(cell1, cell2)
-    print(f"Normal vs inverse (should be same): {diff}")
-
-    # Should be identical after inverse handling
-    assert diff == 0.0, f"Inverse video should be handled properly, got {diff}"
+    high_diff = perceptual.visual_difference((white, "A"), (black, "A"), palette)
+    low_diff = perceptual.visual_difference((light_gray, "A"), (dark_gray, "A"), palette)
+    assert high_diff > low_diff
 
 
-def test_empty_vs_content_cells():
-    """Empty cells vs content cells should show difference."""
-    # Empty cell (space character, no colors)
-    empty_style = create_mock_style()
-    empty_cell = (empty_style, " ")
-
-    # Content cell
-    content_style = create_mock_style(fg_rgb=(255, 255, 255), bg_rgb=(0, 0, 0))
-    content_cell = (content_style, "A")
-
-    diff = perceptual.visual_difference(empty_cell, content_cell)
-    print(f"Empty vs content: {diff}")
-
-    assert diff > 0.0, f"Empty vs content should show difference, got {diff}"
+def test_inverse_video_flips_fg_and_bg(palette):
+    normal = rgb_style(fg=(255, 255, 255), bg=(0, 0, 0), reverse=False)
+    inverse = rgb_style(fg=(0, 0, 0), bg=(255, 255, 255), reverse=True)
+    diff = perceptual.visual_difference((normal, "A"), (inverse, "A"), palette)
+    assert diff == 0.0
 
 
-def test_bright_blue_vs_brown():
-    """Bright blue vs brown should show large perceptual difference."""
-    blue_style = create_mock_style(fg_rgb=(0, 0, 255), bg_rgb=(0, 0, 0))
-    brown_style = create_mock_style(fg_rgb=(139, 69, 19), bg_rgb=(0, 0, 0))
-
-    blue_cell = (blue_style, "A")
-    brown_cell = (brown_style, "A")
-
-    diff = perceptual.visual_difference(blue_cell, brown_cell)
-    print(f"Bright blue vs brown: {diff}")
-
-    # Should be significant difference (LAB Delta E ~158, but averaged with bg)
-    assert diff > 30.0, f"Bright blue vs brown should be very different, got {diff}"
+def test_default_colours_resolve_to_palette_fg_and_bg(palette):
+    """A default-style cell looks like white-on-black under the default palette."""
+    default = Style()
+    explicit = rgb_style(fg=(255, 255, 255), bg=(0, 0, 0))
+    diff = perceptual.visual_difference((default, " "), (explicit, " "), palette)
+    assert diff == 0.0
 
 
-def test_similar_video_grays():
-    """Similar video grays should show small difference."""
-    gray1_style = create_mock_style(fg_rgb=(136, 147, 158), bg_rgb=(0, 0, 0))
-    gray2_style = create_mock_style(fg_rgb=(130, 141, 151), bg_rgb=(0, 0, 0))
-
-    cell1 = (gray1_style, " ")
-    cell2 = (gray2_style, " ")
-
-    diff = perceptual.visual_difference(cell1, cell2)
-    print(f"Similar video grays: {diff}")
-
-    # Should be small difference (LAB Delta E ~2.4)
-    assert diff < 5.0, f"Similar grays should be small difference, got {diff}"
+def test_indexed_colours_resolve_through_the_palette(palette):
+    """SGR 31 red compares equal to the RGB the palette maps it to."""
+    indexed_red = Style(fg=Color("indexed", 1))
+    rgb_red = Style(fg=Color("rgb", palette.colors[1]))
+    diff = perceptual.visual_difference((indexed_red, "x"), (rgb_red, "x"), palette)
+    assert diff == 0.0
 
 
-if __name__ == "__main__":
-    print("=== Testing Visual Difference Algorithm ===")
-    test_identical_cells_return_zero()
-    test_different_characters_same_colors()
-    test_same_character_different_colors()
-    test_high_contrast_vs_low_contrast_colors()
-    test_inverse_video_handling()
-    test_empty_vs_content_cells()
-    test_bright_blue_vs_brown()
-    test_similar_video_grays()
-    print("All tests passed!")
+def test_palette_redefinition_changes_the_comparison():
+    """OSC 4 recolouring index 1 to blue makes indexed-1 differ from red."""
+    board = Board(width=2, height=2)
+    indexed = Style(fg=Color("indexed", 1))
+    red = Style(fg=Color("rgb", (205, 0, 0)))
+
+    before = perceptual.visual_difference((indexed, "x"), (red, "x"), board.palette)
+    board.parser.feed("\x1b]4;1;#0000ff\x07")
+    after = perceptual.visual_difference((indexed, "x"), (red, "x"), board.palette)
+
+    assert before == 0.0
+    assert after > 30.0
+
+
+def test_bright_blue_vs_brown(palette):
+    blue = rgb_style(fg=(0, 0, 255), bg=(0, 0, 0))
+    brown = rgb_style(fg=(139, 69, 19), bg=(0, 0, 0))
+    diff = perceptual.visual_difference((blue, "A"), (brown, "A"), palette)
+    assert diff > 30.0
+
+
+def test_similar_video_grays(palette):
+    gray1 = rgb_style(fg=(136, 147, 158), bg=(0, 0, 0))
+    gray2 = rgb_style(fg=(130, 141, 151), bg=(0, 0, 0))
+    diff = perceptual.visual_difference((gray1, " "), (gray2, " "), palette)
+    assert diff < 5.0

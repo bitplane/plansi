@@ -2,10 +2,10 @@
 
 from typing import Iterator, Tuple, Any
 from bittty import Board
+from bittty.style import style_to_ansi
 
 from .base import Pipe
-from ..control_codes import DISABLE_LINE_WRAP, ENABLE_LNM, MOVE_CURSOR
-from .. import style
+from ..control_codes import DISABLE_LINE_WRAP, ENABLE_LNM, MOVE_CURSOR, RESET_STYLE
 from .. import perceptual
 
 
@@ -102,12 +102,16 @@ class AnsiBuffer(Pipe):
                         self.current_cursor_x = col
                         self.current_cursor_y = row
 
-                    # Generate style changes
+                    # Generate style changes: bittty's cached diff when we know
+                    # the current state, reset + full style when we don't
                     curr_style, curr_char = curr_cell
-                    style_changes = style.diff(self.current_style, curr_style, self.args.cache_style)
+                    if self.args.cache_style and self.current_style is not None:
+                        style_changes = self.current_style.diff(curr_style)
+                    else:
+                        style_changes = RESET_STYLE + style_to_ansi(curr_style)
                     if style_changes:
                         output.append(style_changes)
-                        self.current_style = curr_style
+                    self.current_style = curr_style
 
                     # Output character
                     output.append(curr_char if curr_char else " ")
@@ -152,10 +156,10 @@ class AnsiBuffer(Pipe):
 
         # If threshold is 0, any style difference triggers update
         if self.args.threshold == 0:
-            return not style.equal(main_style, alt_style)
+            return main_style != alt_style
 
         # Check perceptual difference
-        visual_diff = perceptual.visual_difference(main_cell, alt_cell)
+        visual_diff = perceptual.visual_difference(main_cell, alt_cell, self.curr_board.palette)
         return visual_diff >= self.args.threshold
 
     def _generate_cursor_movement(self, target_col: int, target_row: int) -> str:

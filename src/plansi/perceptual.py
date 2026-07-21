@@ -82,49 +82,51 @@ def quantize_rgb(color: tuple) -> tuple:
     return (r // 8 * 8, g // 8 * 8, b // 8 * 8)
 
 
-def extract_rgb_color(color_obj) -> tuple:
-    """Extract RGB tuple from bittty color object.
+def resolve_rgb(color, palette, fallback: tuple) -> tuple:
+    """Resolve a bittty colour to quantized RGB through the live palette.
+
+    Indexed colours look up the palette's 256-colour table; default colours
+    fall back to the palette's real foreground/background instead of black.
 
     Args:
-        color_obj: bittty color object
+        color: bittty Color object (or None)
+        palette: bittty PaletteDevice
+        fallback: RGB tuple used when the colour is default/unset
 
     Returns:
-        RGB tuple (r, g, b) - defaults to black if no color
+        Quantized RGB tuple (r, g, b)
     """
-    if not color_obj or not color_obj.value:
-        return (0, 0, 0)  # Default to black
-
-    if len(color_obj.value) == 3:
-        # Extract and quantize the color
-        return quantize_rgb(tuple(color_obj.value))
-
-    return (0, 0, 0)  # Default to black if can't extract
+    rgb = palette.resolve(color)
+    if rgb is None:
+        rgb = fallback
+    return quantize_rgb(tuple(rgb))
 
 
-def visual_difference(cell1: tuple, cell2: tuple) -> float:
+def visual_difference(cell1: tuple, cell2: tuple, palette) -> float:
     """Calculate visual difference between two cells based on human perception.
+
+    Colour-only: character differences are the caller's problem.
 
     Args:
         cell1: (Style, char) tuple from first cell
         cell2: (Style, char) tuple from second cell
+        palette: bittty PaletteDevice for resolving indexed/default colours
 
     Returns:
         Visual difference percentage (0-100)
     """
-    style1, char1 = cell1
-    style2, char2 = cell2
+    style1, _ = cell1
+    style2, _ = cell2
 
-    # Early exit for identical characters and styles
-    if char1 == char2 and style1.reverse == style2.reverse:
-        # Quick style comparison before expensive color extraction
-        if style1.fg == style2.fg and style1.bg == style2.bg:
-            return 0.0
+    # Early exit before expensive color extraction
+    if style1.reverse == style2.reverse and style1.fg == style2.fg and style1.bg == style2.bg:
+        return 0.0
 
     # Extract colors once
-    fg1 = extract_rgb_color(style1.fg)
-    bg1 = extract_rgb_color(style1.bg)
-    fg2 = extract_rgb_color(style2.fg)
-    bg2 = extract_rgb_color(style2.bg)
+    fg1 = resolve_rgb(style1.fg, palette, palette.foreground)
+    bg1 = resolve_rgb(style1.bg, palette, palette.background)
+    fg2 = resolve_rgb(style2.fg, palette, palette.foreground)
+    bg2 = resolve_rgb(style2.bg, palette, palette.background)
 
     # Handle inverse video by flipping fg/bg for comparison
     if style1.reverse:
@@ -138,16 +140,3 @@ def visual_difference(cell1: tuple, cell2: tuple) -> float:
     total_diff = (fg_color_diff + bg_color_diff) / 2.0
 
     return total_diff * 100.0
-
-
-def contrast(fg_color: tuple, bg_color: tuple) -> float:
-    """Calculate contrast between foreground and background colors.
-
-    Args:
-        fg_color: RGB tuple (r, g, b)
-        bg_color: RGB tuple (r, g, b)
-
-    Returns:
-        Contrast value (0.0 to ~441.67)
-    """
-    return color_distance(fg_color, bg_color)
