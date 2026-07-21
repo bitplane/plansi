@@ -62,20 +62,13 @@ def get_output(processor, args):
         # Play to terminal
         pipeline = TerminalPlayer(processor, args)
         return pipeline, False
-    else:
-        # Output to .cast file
-        is_cast_input = args.input.endswith(".cast")
 
-        if not is_cast_input:
-            # Need to convert ANSI to cast format
-            args.title = f"plansi - {os.path.basename(args.input)}"
-            cast = CastWriter(processor, args)
-            pipeline = FileWriter(cast, args)
-        else:
-            # Direct copy of cast file - no title needed
-            pipeline = FileWriter(processor, args)
-
-        return pipeline, True
+    # Output to .cast file - every input format decodes to ANSI upstream,
+    # so it all goes back through CastWriter for framing
+    args.title = f"plansi - {os.path.basename(args.input)}"
+    cast = CastWriter(processor, args)
+    pipeline = FileWriter(cast, args)
+    return pipeline, True
 
 
 def build_pipeline(args):

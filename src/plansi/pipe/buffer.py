@@ -12,10 +12,14 @@ from .. import perceptual
 class AnsiBuffer(Pipe):
     """Accumulates ANSI into a buffer and outputs differential updates.
 
-    Uses a bittty Board to parse ANSI sequences and maintain video memory,
-    then compares cells to generate minimal update sequences.
+    Two bittty Boards: the truth board parses every input chunk and holds what
+    the input has actually drawn; the viewer board holds what the receiving
+    terminal shows, updated only with the cells we emit. Diffing truth against
+    viewer means incremental input (cast chunks) accumulates instead of being
+    erased, and changes suppressed by the threshold stay in play — their drift
+    keeps growing against future frames until it crosses the line.
 
-    Input: (timestamp, ansi_string) full frames
+    Input: (timestamp, ansi_string) full frames or incremental chunks
     Output: (timestamp, ansi_string) optimized differential updates
 
     Args (via self.args):
@@ -28,16 +32,14 @@ class AnsiBuffer(Pipe):
     """
 
     def setup(self):
-        """Initialize two separate boards."""
-        # Previous frame board
-        self.prev_board = Board(width=self.width, height=self.height)
-        self.prev_board.parser.feed(DISABLE_LINE_WRAP)
-        self.prev_board.parser.feed(ENABLE_LNM)
+        """Initialize the truth and viewer boards."""
+        self.truth_board = Board(width=self.width, height=self.height)
+        self.truth_board.parser.feed(DISABLE_LINE_WRAP)
+        self.truth_board.parser.feed(ENABLE_LNM)
 
-        # Current frame board
-        self.curr_board = Board(width=self.width, height=self.height)
-        self.curr_board.parser.feed(DISABLE_LINE_WRAP)
-        self.curr_board.parser.feed(ENABLE_LNM)
+        self.viewer_board = Board(width=self.width, height=self.height)
+        self.viewer_board.parser.feed(DISABLE_LINE_WRAP)
+        self.viewer_board.parser.feed(ENABLE_LNM)
 
         # State tracking for optimized output
         self.current_cursor_x = 0
@@ -51,28 +53,20 @@ class AnsiBuffer(Pipe):
 
         Args:
             timestamp: Frame timestamp
-            data: Full frame ANSI string
+            data: Full frame or incremental chunk of ANSI
 
         Yields:
             (timestamp, ansi_string) with differential updates
         """
-        ansi_input = data
+        self.truth_board.parser.feed(data)
 
-        # First frame: parse into prev_board and output directly
+        # First frame: pass through verbatim - the viewer sees exactly what we sent
         if self.first_frame:
             self.first_frame = False
-            # Parse into prev_board only - no cursor reset, let ANSI control cursor
-            self.prev_board.parser.feed(ansi_input)
-
-            # Output first frame directly
-            yield timestamp, ansi_input
+            self.viewer_board.parser.feed(data)
+            yield timestamp, data
             self.frame_count += 1
             return
-
-        # Parse current frame into curr_board - no cursor reset, accumulate naturally
-        self.curr_board.parser.feed(ansi_input)
-
-        # Generate differential output by comparing boards
 
         # Reset state tracking for this frame
         self.current_cursor_x = 0
@@ -82,17 +76,17 @@ class AnsiBuffer(Pipe):
         output = []
         cells_changed = 0
         cells_total = 0
+        truth_page = self.truth_board.blitter.current_buffer
+        viewer_page = self.viewer_board.blitter.primary_buffer
 
         for row in range(self.height):
             for col in range(self.width):
                 cells_total += 1
 
-                # Get cells from both boards
-                prev_cell = self.prev_board.blitter.primary_buffer.get_cell(col, row)
-                curr_cell = self.curr_board.blitter.primary_buffer.get_cell(col, row)
+                viewer_cell = viewer_page.get_cell(col, row)
+                truth_cell = truth_page.get_cell(col, row)
 
-                # Check if cells are different
-                if self._cells_different(prev_cell, curr_cell):
+                if self._cells_different(viewer_cell, truth_cell):
                     cells_changed += 1
 
                     # Generate cursor movement if needed
@@ -104,17 +98,19 @@ class AnsiBuffer(Pipe):
 
                     # Generate style changes: bittty's cached diff when we know
                     # the current state, reset + full style when we don't
-                    curr_style, curr_char = curr_cell
+                    truth_style, truth_char = truth_cell
                     if self.args.cache_style and self.current_style is not None:
-                        style_changes = self.current_style.diff(curr_style)
+                        style_changes = self.current_style.diff(truth_style)
                     else:
-                        style_changes = RESET_STYLE + style_to_ansi(curr_style)
+                        style_changes = RESET_STYLE + style_to_ansi(truth_style)
                     if style_changes:
                         output.append(style_changes)
-                    self.current_style = curr_style
+                    self.current_style = truth_style
 
-                    # Output character
-                    output.append(curr_char if curr_char else " ")
+                    # Output character, and land it on the viewer board
+                    char = truth_char if truth_char else " "
+                    output.append(char)
+                    viewer_page.set_cell(col, row, char, truth_style)
 
                     # Update cursor position after character
                     self.current_cursor_x = col + 1
@@ -122,44 +118,42 @@ class AnsiBuffer(Pipe):
                         self.current_cursor_x = 0
                         self.current_cursor_y += 1
 
-        # Swap boards - current becomes previous for next frame
-        self.prev_board, self.curr_board = self.curr_board, self.prev_board
-
         # Debug info
         if self.args.debug:
             self.debug("frame", str(self.frame_count))
             self.debug("changed", f"{cells_changed}/{cells_total}")
             self.debug("threshold", f"{self.args.threshold:.1f}")
 
-        # Output differential ANSI
-        ansi_output = "".join(output)
-        yield timestamp, ansi_output
-
         self.frame_count += 1
 
-    def _cells_different(self, main_cell: tuple, alt_cell: tuple) -> bool:
+        # Output differential ANSI; silent frames vanish from the stream
+        ansi_output = "".join(output)
+        if ansi_output:
+            yield timestamp, ansi_output
+
+    def _cells_different(self, viewer_cell: tuple, truth_cell: tuple) -> bool:
         """Check if two cells are visually different enough to update.
 
         Args:
-            main_cell: (Style, char) from main buffer
-            alt_cell: (Style, char) from alt buffer
+            viewer_cell: (Style, char) the receiving terminal currently shows
+            truth_cell: (Style, char) the input has drawn
 
         Returns:
             True if cells should be updated
         """
-        main_style, main_char = main_cell
-        alt_style, alt_char = alt_cell
+        viewer_style, viewer_char = viewer_cell
+        truth_style, truth_char = truth_cell
 
         # Different characters always update
-        if main_char != alt_char:
+        if viewer_char != truth_char:
             return True
 
         # If threshold is 0, any style difference triggers update
         if self.args.threshold == 0:
-            return main_style != alt_style
+            return viewer_style != truth_style
 
         # Check perceptual difference
-        visual_diff = perceptual.visual_difference(main_cell, alt_cell, self.curr_board.palette)
+        visual_diff = perceptual.visual_difference(viewer_cell, truth_cell, self.truth_board.palette)
         return visual_diff >= self.args.threshold
 
     def _generate_cursor_movement(self, target_col: int, target_row: int) -> str:
@@ -191,7 +185,7 @@ class AnsiBuffer(Pipe):
         """Handle resize event - resize boards first, then propagate."""
         # Resize our boards first (before updating self.width/height)
         if width != self.width or height != self.height:
-            self.prev_board.resize(width, height)
-            self.curr_board.resize(width, height)
+            self.truth_board.resize(width, height)
+            self.viewer_board.resize(width, height)
         # Now call parent to update self.width/height and propagate
         yield from super().on_resize(timestamp, width, height)

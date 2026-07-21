@@ -20,11 +20,7 @@ uvx plansi video.mp4 --cache-position --no-cache-style
 
 ### 🗑️ refactor
 
-- [ ] fix dogshit cli
-- [x] make nice and pipeliney
-- [x] get some logging in 🪵
-- [ ] write some tests
-  - [ ] write some integration tests
+- [ ] write some integration tests
 - [ ] performance tuning
 - [ ] write some docs
 
@@ -38,7 +34,3 @@ uvx plansi video.mp4 --cache-position --no-cache-style
 
 ### 📺 Terminal & Display
 - [ ] **SIGWINCH handling**: Resize video on terminal window resize during live playback
-- [ ] **Cast file quantization**: Quantize existing .cast files
-
-### 🔧 API Improvements
-- [ ] **File-like object support**: Allow writing to BytesIO, StringIO for textual-asciinema
