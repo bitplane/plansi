@@ -1,7 +1,7 @@
 """Buffer pipe using bittty for ANSI accumulation and differential rendering."""
 
 from typing import Iterator, Tuple, Any
-from bittty import Terminal
+from bittty import Board
 
 from .base import Pipe
 from ..control_codes import DISABLE_LINE_WRAP, ENABLE_LNM, MOVE_CURSOR
@@ -12,7 +12,7 @@ from .. import perceptual
 class AnsiBuffer(Pipe):
     """Accumulates ANSI into a buffer and outputs differential updates.
 
-    Uses bittty Terminal to parse ANSI sequences and maintain buffers,
+    Uses a bittty Board to parse ANSI sequences and maintain video memory,
     then compares cells to generate minimal update sequences.
 
     Input: (timestamp, ansi_string) full frames
@@ -28,18 +28,16 @@ class AnsiBuffer(Pipe):
     """
 
     def setup(self):
-        """Initialize two separate terminals."""
-        # Previous frame terminal
-        self.prev_terminal = Terminal(width=self.width, height=self.height)
-        self.prev_terminal.cursor_visible = False
-        self.prev_terminal.parser.feed(DISABLE_LINE_WRAP)
-        self.prev_terminal.parser.feed(ENABLE_LNM)
+        """Initialize two separate boards."""
+        # Previous frame board
+        self.prev_board = Board(width=self.width, height=self.height)
+        self.prev_board.parser.feed(DISABLE_LINE_WRAP)
+        self.prev_board.parser.feed(ENABLE_LNM)
 
-        # Current frame terminal
-        self.curr_terminal = Terminal(width=self.width, height=self.height)
-        self.curr_terminal.cursor_visible = False
-        self.curr_terminal.parser.feed(DISABLE_LINE_WRAP)
-        self.curr_terminal.parser.feed(ENABLE_LNM)
+        # Current frame board
+        self.curr_board = Board(width=self.width, height=self.height)
+        self.curr_board.parser.feed(DISABLE_LINE_WRAP)
+        self.curr_board.parser.feed(ENABLE_LNM)
 
         # State tracking for optimized output
         self.current_cursor_x = 0
@@ -60,21 +58,21 @@ class AnsiBuffer(Pipe):
         """
         ansi_input = data
 
-        # First frame: parse into prev_terminal and output directly
+        # First frame: parse into prev_board and output directly
         if self.first_frame:
             self.first_frame = False
-            # Parse into prev_terminal only - no cursor reset, let ANSI control cursor
-            self.prev_terminal.parser.feed(ansi_input)
+            # Parse into prev_board only - no cursor reset, let ANSI control cursor
+            self.prev_board.parser.feed(ansi_input)
 
             # Output first frame directly
             yield timestamp, ansi_input
             self.frame_count += 1
             return
 
-        # Parse current frame into curr_terminal - no cursor reset, accumulate naturally
-        self.curr_terminal.parser.feed(ansi_input)
+        # Parse current frame into curr_board - no cursor reset, accumulate naturally
+        self.curr_board.parser.feed(ansi_input)
 
-        # Generate differential output by comparing terminals
+        # Generate differential output by comparing boards
 
         # Reset state tracking for this frame
         self.current_cursor_x = 0
@@ -89,9 +87,9 @@ class AnsiBuffer(Pipe):
             for col in range(self.width):
                 cells_total += 1
 
-                # Get cells from both terminals
-                prev_cell = self.prev_terminal.primary_buffer.get_cell(col, row)
-                curr_cell = self.curr_terminal.primary_buffer.get_cell(col, row)
+                # Get cells from both boards
+                prev_cell = self.prev_board.blitter.primary_buffer.get_cell(col, row)
+                curr_cell = self.curr_board.blitter.primary_buffer.get_cell(col, row)
 
                 # Check if cells are different
                 if self._cells_different(prev_cell, curr_cell):
@@ -120,8 +118,8 @@ class AnsiBuffer(Pipe):
                         self.current_cursor_x = 0
                         self.current_cursor_y += 1
 
-        # Swap terminals - current becomes previous for next frame
-        self.prev_terminal, self.curr_terminal = self.curr_terminal, self.prev_terminal
+        # Swap boards - current becomes previous for next frame
+        self.prev_board, self.curr_board = self.curr_board, self.prev_board
 
         # Debug info
         if self.args.debug:
@@ -185,18 +183,11 @@ class AnsiBuffer(Pipe):
         # Need explicit cursor positioning
         return MOVE_CURSOR.format(target_row + 1, target_col + 1)
 
-    def _initialize_primary_buffer(self):
-        """Initialize primary buffer to match cleared terminal state."""
-        # Clear the primary buffer completely
-        self.terminal.clear_screen()
-
-        # Now the primary buffer should have empty cells with default style
-
     def on_resize(self, timestamp: float, width: int, height: int) -> Iterator[Tuple[float, Any]]:
-        """Handle resize event - resize terminals first, then propagate."""
-        # Resize our terminals first (before updating self.width/height)
+        """Handle resize event - resize boards first, then propagate."""
+        # Resize our boards first (before updating self.width/height)
         if width != self.width or height != self.height:
-            self.prev_terminal.resize(width, height)
-            self.curr_terminal.resize(width, height)
+            self.prev_board.resize(width, height)
+            self.curr_board.resize(width, height)
         # Now call parent to update self.width/height and propagate
         yield from super().on_resize(timestamp, width, height)

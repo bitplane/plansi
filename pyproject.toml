@@ -1,7 +1,7 @@
 [project]
 name = "plansi"
 description = "plays videos as ansi"
-version = "0.1.0"
+version = "0.1.1"
 authors = [
     { name = "Gareth Davidson", email = "gaz@bitplane.net" }
 ]
@@ -9,7 +9,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 
 dependencies = [
-    "bittty==0.0.6",
+    "bittty>=0.1.1,<0.2",
     "chafa.py~=1.2",
     "av~=15.0",
     "Pillow~=11.3",
